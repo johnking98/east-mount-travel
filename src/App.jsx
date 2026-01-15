@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Plus, Search, Download, Edit2, Trash2, Car, Users, Briefcase, MapPin, Phone, Clock, X, LogOut, Eye, EyeOff, Shield, User } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase 配置 - 从环境变量读取
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// 初始化 Supabase 客户端
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 const EastMountTravelSystem = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -11,7 +19,7 @@ const EastMountTravelSystem = () => {
   const [filterDate, setFilterDate] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingBooking, setEditingBooking] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     serviceType: '接机',
     date: '',
@@ -28,7 +36,7 @@ const EastMountTravelSystem = () => {
     notes: ''
   });
 
-  // 预设用户账号（实际使用时应该存储在安全的后端）
+  // 预设用户账号
   const users = {
     admin: { password: 'admin123', role: 'admin', name: '管理员' },
     manager: { password: 'manager123', role: 'admin', name: '经理' },
@@ -36,34 +44,48 @@ const EastMountTravelSystem = () => {
     viewer: { password: 'viewer123', role: 'viewer', name: '查看者' }
   };
 
-  // 加载数据
+  // 加载数据和实时订阅
   useEffect(() => {
-    if (isLoggedIn) {
+    if (isLoggedIn && supabase) {
       loadBookings();
+      
+      // 设置实时订阅，监听数据变化
+      const channel = supabase
+        .channel('bookings-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'bookings' },
+          (payload) => {
+            console.log('数据变化:', payload);
+            loadBookings(); // 数据变化时重新加载
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [isLoggedIn]);
 
   const loadBookings = async () => {
+    if (!supabase) return;
+    
     try {
       setLoading(true);
-      const result = await window.storage.get('east-mount-bookings', true);
-      if (result && result.value) {
-        setBookings(JSON.parse(result.value));
-      }
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
+        .order('date', { ascending: true })
+        .order('time', { ascending: true });
+
+      if (error) throw error;
+      setBookings(data || []);
     } catch (error) {
       console.error('加载数据失败:', error);
+      alert('加载数据失败: ' + error.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const saveBookings = async (newBookings) => {
-    try {
-      await window.storage.set('east-mount-bookings', JSON.stringify(newBookings), true);
-      setBookings(newBookings);
-    } catch (error) {
-      console.error('保存数据失败:', error);
-      alert('保存失败，请重试');
     }
   };
 
@@ -93,23 +115,73 @@ const EastMountTravelSystem = () => {
       return;
     }
 
-    let newBookings;
-    if (editingBooking) {
-      newBookings = bookings.map(b => b.id === editingBooking.id ? { ...formData, id: b.id, updatedBy: currentUser.name, updatedAt: new Date().toISOString() } : b);
-      setEditingBooking(null);
-    } else {
-      const newBooking = { 
-        ...formData, 
-        id: Date.now().toString(),
-        createdBy: currentUser.name,
-        createdAt: new Date().toISOString()
-      };
-      newBookings = [...bookings, newBooking];
+    if (!supabase) {
+      alert('数据库未配置，请检查环境变量');
+      return;
     }
-    
-    await saveBookings(newBookings);
-    resetForm();
-    setShowForm(false);
+
+    try {
+      setLoading(true);
+      
+      if (editingBooking) {
+        // 更新现有订单
+        const { error } = await supabase
+          .from('bookings')
+          .update({
+            service_type: formData.serviceType,
+            date: formData.date,
+            time: formData.time,
+            flight_number: formData.flightNumber,
+            pickup: formData.pickup,
+            dropoff: formData.dropoff,
+            passengers: formData.passengers,
+            child_age: formData.childAge || null,
+            luggage: formData.luggage,
+            luggage_size: formData.luggageSize,
+            customer_name: formData.customerName,
+            customer_phone: formData.customerPhone,
+            notes: formData.notes || null,
+            updated_by: currentUser.name,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingBooking.id);
+
+        if (error) throw error;
+        setEditingBooking(null);
+      } else {
+        // 创建新订单
+        const { error } = await supabase
+          .from('bookings')
+          .insert([{
+            service_type: formData.serviceType,
+            date: formData.date,
+            time: formData.time,
+            flight_number: formData.flightNumber,
+            pickup: formData.pickup,
+            dropoff: formData.dropoff,
+            passengers: formData.passengers,
+            child_age: formData.childAge || null,
+            luggage: formData.luggage,
+            luggage_size: formData.luggageSize,
+            customer_name: formData.customerName,
+            customer_phone: formData.customerPhone,
+            notes: formData.notes || null,
+            created_by: currentUser.name
+          }]);
+
+        if (error) throw error;
+      }
+
+      await loadBookings();
+      resetForm();
+      setShowForm(false);
+      alert(editingBooking ? '订单更新成功！' : '订单创建成功！');
+    } catch (error) {
+      console.error('保存失败:', error);
+      alert('保存失败: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -135,7 +207,21 @@ const EastMountTravelSystem = () => {
       alert('您没有权限编辑订单');
       return;
     }
-    setFormData(booking);
+    setFormData({
+      serviceType: booking.service_type,
+      date: booking.date,
+      time: booking.time,
+      flightNumber: booking.flight_number,
+      pickup: booking.pickup,
+      dropoff: booking.dropoff,
+      passengers: booking.passengers,
+      childAge: booking.child_age || '',
+      luggage: booking.luggage,
+      luggageSize: booking.luggage_size,
+      customerName: booking.customer_name,
+      customerPhone: booking.customer_phone,
+      notes: booking.notes || ''
+    });
     setEditingBooking(booking);
     setShowForm(true);
   };
@@ -145,18 +231,37 @@ const EastMountTravelSystem = () => {
       alert('您没有权限删除订单');
       return;
     }
+    if (!supabase) {
+      alert('数据库未配置');
+      return;
+    }
     if (window.confirm('确定要删除这个订单吗？')) {
-      const newBookings = bookings.filter(b => b.id !== id);
-      await saveBookings(newBookings);
+      try {
+        setLoading(true);
+        const { error } = await supabase
+          .from('bookings')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
+        await loadBookings();
+        alert('订单删除成功！');
+      } catch (error) {
+        console.error('删除失败:', error);
+        alert('删除失败: ' + error.message);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   const handleExport = () => {
     const headers = ['服务类型', '日期', '时间', '航班号', '上车地点', '下车地点', '乘客人数', '儿童年龄', '行李数量', '行李尺寸', '客户姓名', '联系电话', '备注', '创建人', '创建时间'];
     const rows = bookings.map(b => [
-      b.serviceType, b.date, b.time, b.flightNumber, b.pickup, b.dropoff,
-      b.passengers, b.childAge || '', b.luggage, b.luggageSize,
-      b.customerName, b.customerPhone, b.notes || '', b.createdBy || '', b.createdAt || ''
+      b.service_type, b.date, b.time, b.flight_number, b.pickup, b.dropoff,
+      b.passengers, b.child_age || '', b.luggage, b.luggage_size,
+      b.customer_name, b.customer_phone, b.notes || '', b.created_by || '', 
+      b.created_at ? new Date(b.created_at).toLocaleString('zh-CN') : ''
     ]);
     
     const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -169,15 +274,11 @@ const EastMountTravelSystem = () => {
 
   const filteredBookings = bookings.filter(booking => {
     const matchesSearch = 
-      booking.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.flightNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      booking.customerPhone.includes(searchTerm);
+      booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.flight_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.customer_phone?.includes(searchTerm);
     const matchesDate = !filterDate || booking.date === filterDate;
     return matchesSearch && matchesDate;
-  }).sort((a, b) => {
-    const dateA = new Date(a.date + ' ' + a.time);
-    const dateB = new Date(b.date + ' ' + b.time);
-    return dateA - dateB;
   });
 
   const groupedByDate = filteredBookings.reduce((acc, booking) => {
@@ -200,6 +301,12 @@ const EastMountTravelSystem = () => {
             <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">东山国际旅游</h1>
             <p className="text-cyan-300 text-lg font-medium tracking-wide">East Mount Luxury Travel</p>
             <p className="text-gray-400 mt-4">专业包车接送机管理系统</p>
+            
+            {!supabase && (
+              <div className="mt-6 p-4 bg-red-500/20 border border-red-400/30 rounded-xl">
+                <p className="text-red-300 text-sm">⚠️ 数据库未配置，请检查环境变量</p>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
@@ -419,7 +526,7 @@ const EastMountTravelSystem = () => {
         </div>
 
         {/* Loading State */}
-        {loading ? (
+        {loading && activeView === 'list' ? (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl p-16 text-center border border-white/20">
             <div className="animate-spin w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
             <p className="text-gray-400 text-xl">加载数据中...</p>
@@ -445,11 +552,11 @@ const EastMountTravelSystem = () => {
                           <div>
                             <div className="flex items-center space-x-2 mb-3">
                               <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ${
-                                booking.serviceType === '接机' 
+                                booking.service_type === '接机' 
                                   ? 'bg-green-500/20 text-green-300 border border-green-400/30' 
                                   : 'bg-orange-500/20 text-orange-300 border border-orange-400/30'
                               }`}>
-                                {booking.serviceType}
+                                {booking.service_type}
                               </span>
                             </div>
                             <div className="space-y-2">
@@ -458,7 +565,7 @@ const EastMountTravelSystem = () => {
                                 <span className="font-medium">{booking.date} {booking.time}</span>
                               </div>
                               <div className="text-cyan-300 font-mono font-semibold text-lg">
-                                {booking.flightNumber}
+                                {booking.flight_number}
                               </div>
                             </div>
                           </div>
@@ -482,11 +589,11 @@ const EastMountTravelSystem = () => {
                             <div className="space-y-1">
                               <div className="flex items-center text-white font-medium">
                                 <Users className="w-4 h-4 mr-2 text-blue-400" />
-                                <span>{booking.passengers}人{booking.childAge && ` (${booking.childAge}岁)`}</span>
+                                <span>{booking.passengers}人{booking.child_age && ` (${booking.child_age}岁)`}</span>
                               </div>
                               <div className="flex items-center text-white">
                                 <Briefcase className="w-4 h-4 mr-2 text-purple-400" />
-                                <span>{booking.luggage}件 ({booking.luggageSize})</span>
+                                <span>{booking.luggage}件 ({booking.luggage_size})</span>
                               </div>
                             </div>
                           </div>
@@ -494,10 +601,10 @@ const EastMountTravelSystem = () => {
                           <div>
                             <p className="text-gray-400 text-sm mb-2">客户联系</p>
                             <div className="space-y-1">
-                              <div className="text-white font-medium">{booking.customerName}</div>
+                              <div className="text-white font-medium">{booking.customer_name}</div>
                               <div className="flex items-center text-cyan-300">
                                 <Phone className="w-4 h-4 mr-2" />
-                                <span className="font-mono">{booking.customerPhone}</span>
+                                <span className="font-mono">{booking.customer_phone}</span>
                               </div>
                               {booking.notes && (
                                 <div className="mt-2 text-amber-300 text-sm bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-400/20">
@@ -560,19 +667,19 @@ const EastMountTravelSystem = () => {
                                   <div className="text-center">
                                     <div className="text-2xl font-bold text-white">{booking.time}</div>
                                     <div className={`text-sm font-medium mt-1 ${
-                                      booking.serviceType === '接机' ? 'text-green-400' : 'text-orange-400'
+                                      booking.service_type === '接机' ? 'text-green-400' : 'text-orange-400'
                                     }`}>
-                                      {booking.serviceType}
+                                      {booking.service_type}
                                     </div>
                                   </div>
                                   <div className="h-12 w-px bg-white/20"></div>
                                   <div>
-                                    <div className="text-white font-semibold text-lg">{booking.flightNumber}</div>
+                                    <div className="text-white font-semibold text-lg">{booking.flight_number}</div>
                                     <div className="text-gray-300 text-sm mt-1">
                                       {booking.pickup} → {booking.dropoff}
                                     </div>
                                     <div className="flex items-center space-x-4 mt-2 text-sm">
-                                      <span className="text-blue-300">{booking.customerName}</span>
+                                      <span className="text-blue-300">{booking.customer_name}</span>
                                       <span className="text-gray-400">•</span>
                                       <span className="text-gray-400">{booking.passengers}人</span>
                                       <span className="text-gray-400">•</span>
@@ -797,9 +904,10 @@ const EastMountTravelSystem = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+                    disabled={loading}
+                    className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editingBooking ? '保存修改' : '创建订单'}
+                    {loading ? '保存中...' : (editingBooking ? '保存修改' : '创建订单')}
                   </button>
                 </div>
               </form>
