@@ -28,6 +28,7 @@ const EastMountTravelSystem = () => {
   const [showAfterSalesModal, setShowAfterSalesModal] = useState(false);
   const [currentAfterSalesBooking, setCurrentAfterSalesBooking] = useState(null);
   const [afterSalesNotes, setAfterSalesNotes] = useState('');
+  const [showFinanceReport, setShowFinanceReport] = useState(false);
   const [systemSettings, setSystemSettings] = useState({
     company_name_cn: '东山国际旅游',
     company_name_en: 'East Mount Luxury Travel',
@@ -1007,17 +1008,23 @@ const EastMountTravelSystem = () => {
               <Users className="w-12 h-12 text-amber-200" />
             </div>
           </div>
-          <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 border border-green-400/30">
+          <button
+            onClick={() => setShowFinanceReport(true)}
+            className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 border border-green-400/30 w-full hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 cursor-pointer"
+          >
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-100 text-sm font-medium">总收入</p>
+              <div className="text-left">
+                <p className="text-green-100 text-sm font-medium flex items-center">
+                  总收入
+                  <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full">点击查看明细</span>
+                </p>
                 <p className="text-4xl font-bold text-white mt-2">
-                  ${bookings.reduce((sum, b) => sum + calculateTotalPrice(b), 0).toFixed(2)}
+                  ¥{bookings.reduce((sum, b) => sum + calculateTotalPrice(b), 0).toFixed(2)}
                 </p>
               </div>
               <DollarSign className="w-12 h-12 text-green-200" />
             </div>
-          </div>
+          </button>
         </div>
 
         {/* 订单列表/日程视图继续... */}
@@ -1128,13 +1135,13 @@ const EastMountTravelSystem = () => {
                                 <div className="flex items-center justify-between">
                                   <span className="text-gray-300 text-sm">定金:</span>
                                   <span className="text-white font-semibold">
-                                    ${booking.deposit ? parseFloat(booking.deposit).toFixed(2) : '0.00'}
+                                    ¥{booking.deposit ? parseFloat(booking.deposit).toFixed(2) : '0.00'}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-gray-300 text-sm">尾款:</span>
                                   <span className="text-white font-semibold">
-                                    ${booking.balance ? parseFloat(booking.balance).toFixed(2) : '0.00'}
+                                    ¥{booking.balance ? parseFloat(booking.balance).toFixed(2) : '0.00'}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between pt-2 border-t border-white/20">
@@ -1310,6 +1317,11 @@ const EastMountTravelSystem = () => {
                                         {booking.end_time && (
                                           <div className="text-sm text-gray-400">→ {booking.end_time}</div>
                                         )}
+                                        {booking.service_type === '包车' && booking.end_date && (
+                                          <div className="text-xs text-purple-300 mt-1 bg-purple-500/20 px-2 py-0.5 rounded">
+                                            至 {booking.end_date}
+                                          </div>
+                                        )}
                                         <div className={`text-sm font-medium mt-1 ${
                                           booking.service_type === '接机' ? 'text-green-400' : 
                                           booking.service_type === '送机' ? 'text-orange-400' : 'text-purple-400'
@@ -1337,7 +1349,7 @@ const EastMountTravelSystem = () => {
                                           {totalPrice > 0 && (
                                             <>
                                               <span className="text-gray-400">•</span>
-                                              <span className="text-green-400 font-semibold">${totalPrice.toFixed(2)}</span>
+                                              <span className="text-green-400 font-semibold">¥{totalPrice.toFixed(2)}</span>
                                             </>
                                           )}
                                           <span className="text-gray-400">•</span>
@@ -1431,7 +1443,7 @@ const EastMountTravelSystem = () => {
                                         key={booking.id}
                                         className="text-xs bg-blue-500/30 text-blue-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-blue-500/50 transition-all"
                                         onClick={() => handleEdit(booking)}
-                                        title={`${booking.time} ${booking.customer_name} - $${calculateTotalPrice(booking).toFixed(2)}`}
+                                        title={`${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`}
                                       >
                                         {booking.time} {booking.customer_name}
                                       </div>
@@ -1499,7 +1511,7 @@ const EastMountTravelSystem = () => {
                 <h3 className="text-white font-semibold mb-2">订单信息：</h3>
                 <p className="text-gray-300">客户：{currentAfterSalesBooking.customer_name}</p>
                 <p className="text-gray-300">日期：{currentAfterSalesBooking.date}</p>
-                <p className="text-gray-300">总价：${calculateTotalPrice(currentAfterSalesBooking).toFixed(2)}</p>
+                <p className="text-gray-300">总价：¥{calculateTotalPrice(currentAfterSalesBooking).toFixed(2)}</p>
               </div>
 
               <div>
@@ -1571,6 +1583,16 @@ const EastMountTravelSystem = () => {
           onApprove={(id, userId) => handleApproveRequest(id, userId, true)}
           onReject={(id, userId) => handleApproveRequest(id, userId, false)}
           onClose={() => setShowPermissionRequests(false)}
+        />
+      )}
+
+      {/* 财务报表 Modal */}
+      {showFinanceReport && (
+        <FinanceReportModal
+          bookings={bookings}
+          calculateTotalPrice={calculateTotalPrice}
+          statusConfig={statusConfig}
+          onClose={() => setShowFinanceReport(false)}
         />
       )}
 
@@ -1807,7 +1829,7 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
               </div>
               
               <div>
-                <label className="block text-gray-300 font-medium mb-2">定金 ($)</label>
+                <label className="block text-gray-300 font-medium mb-2">定金 (¥)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1819,7 +1841,7 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
               </div>
               
               <div>
-                <label className="block text-gray-300 font-medium mb-2">尾款 ($)</label>
+                <label className="block text-gray-300 font-medium mb-2">尾款 (¥)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1835,7 +1857,7 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                   <div className="bg-green-500/20 border border-green-400/30 rounded-xl p-4">
                     <div className="flex items-center justify-between">
                       <span className="text-green-300 font-medium text-lg">总价：</span>
-                      <span className="text-3xl font-bold text-green-400">${totalPrice.toFixed(2)}</span>
+                      <span className="text-3xl font-bold text-green-400">¥{totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -2117,6 +2139,197 @@ const PermissionRequestsModal = ({ requests, onApprove, onReject, onClose }) => 
               ))}
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 财务报表 Modal 组件
+const FinanceReportModal = ({ bookings, calculateTotalPrice, statusConfig, onClose }) => {
+  // 按状态分类订单
+  const ordersByStatus = {
+    '待服务': bookings.filter(b => b.status === '待服务'),
+    '已完成': bookings.filter(b => b.status === '已完成'),
+    '已取消': bookings.filter(b => b.status === '已取消')
+  };
+
+  // 计算各状态收入
+  const incomeByStatus = {
+    '待服务': ordersByStatus['待服务'].reduce((sum, b) => sum + calculateTotalPrice(b), 0),
+    '已完成': ordersByStatus['已完成'].reduce((sum, b) => sum + calculateTotalPrice(b), 0),
+    '已取消': ordersByStatus['已取消'].reduce((sum, b) => sum + calculateTotalPrice(b), 0)
+  };
+
+  const totalIncome = Object.values(incomeByStatus).reduce((sum, income) => sum + income, 0);
+
+  // 按月份分组
+  const ordersByMonth = bookings.reduce((acc, booking) => {
+    const month = booking.date.substring(0, 7); // YYYY-MM
+    if (!acc[month]) acc[month] = [];
+    acc[month].push(booking);
+    return acc;
+  }, {});
+
+  // 导出财务报表
+  const handleExportFinance = () => {
+    const headers = ['日期', '客户姓名', '服务类型', '状态', '定金', '尾款', '总价', '售后备注'];
+    const rows = bookings.map(b => {
+      const totalPrice = calculateTotalPrice(b);
+      return [
+        b.date,
+        b.customer_name,
+        b.service_type,
+        statusConfig[b.status || '待服务']?.label || '待服务',
+        (parseFloat(b.deposit) || 0).toFixed(2),
+        (parseFloat(b.balance) || 0).toFixed(2),
+        totalPrice.toFixed(2),
+        b.after_sales_notes || ''
+      ];
+    });
+    
+    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `财务报表_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden border border-white/20">
+        <div className="bg-gradient-to-r from-green-600 to-emerald-500 px-8 py-6 flex items-center justify-between">
+          <h2 className="text-3xl font-bold text-white flex items-center">
+            <DollarSign className="w-8 h-8 mr-3" />
+            财务报表
+          </h2>
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={handleExportFinance}
+              className="bg-white/20 hover:bg-white/30 px-6 py-2 rounded-xl font-semibold text-white flex items-center space-x-2 transition-all"
+            >
+              <Download className="w-5 h-5" />
+              <span>导出报表</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition-all"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </div>
+        </div>
+        
+        <div className="p-8 overflow-y-auto max-h-[calc(90vh-100px)]">
+          {/* 总收入概览 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 border border-green-400/30">
+              <h3 className="text-green-100 text-sm font-medium mb-2">总收入</h3>
+              <p className="text-4xl font-bold text-white">¥{totalIncome.toFixed(2)}</p>
+              <p className="text-green-200 text-sm mt-2">{bookings.length} 笔订单</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-2xl shadow-xl p-6 border border-amber-400/30">
+              <h3 className="text-amber-100 text-sm font-medium mb-2">待服务</h3>
+              <p className="text-4xl font-bold text-white">¥{incomeByStatus['待服务'].toFixed(2)}</p>
+              <p className="text-amber-200 text-sm mt-2">{ordersByStatus['待服务'].length} 笔订单</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl shadow-xl p-6 border border-green-400/30">
+              <h3 className="text-green-100 text-sm font-medium mb-2">已完成</h3>
+              <p className="text-4xl font-bold text-white">¥{incomeByStatus['已完成'].toFixed(2)}</p>
+              <p className="text-green-200 text-sm mt-2">{ordersByStatus['已完成'].length} 笔订单</p>
+            </div>
+            
+            <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl shadow-xl p-6 border border-red-400/30">
+              <h3 className="text-red-100 text-sm font-medium mb-2">已取消</h3>
+              <p className="text-4xl font-bold text-white">¥{incomeByStatus['已取消'].toFixed(2)}</p>
+              <p className="text-red-200 text-sm mt-2">{ordersByStatus['已取消'].length} 笔订单</p>
+            </div>
+          </div>
+
+          {/* 按月份统计 */}
+          <div className="bg-white/5 rounded-2xl p-6 mb-6 border border-white/10">
+            <h3 className="text-2xl font-bold text-white mb-6 flex items-center">
+              <Calendar className="w-6 h-6 mr-3 text-cyan-400" />
+              月度统计
+            </h3>
+            <div className="space-y-4">
+              {Object.keys(ordersByMonth).sort().reverse().map(month => {
+                const monthOrders = ordersByMonth[month];
+                const monthIncome = monthOrders.reduce((sum, b) => sum + calculateTotalPrice(b), 0);
+                return (
+                  <div key={month} className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xl font-semibold text-white">{month}</span>
+                      <span className="text-2xl font-bold text-green-400">¥{monthIncome.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-sm text-gray-400">
+                      <span>{monthOrders.length} 笔订单</span>
+                      <span>•</span>
+                      <span>平均: ¥{(monthIncome / monthOrders.length).toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 订单明细 */}
+          <div className="bg-white/5 rounded-2xl p-6 border border-white/10">
+            <h3 className="text-2xl font-bold text-white mb-6 flex items-center">
+              <Briefcase className="w-6 h-6 mr-3 text-cyan-400" />
+              订单明细
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/20">
+                    <th className="text-left text-gray-300 font-semibold py-3 px-4">日期</th>
+                    <th className="text-left text-gray-300 font-semibold py-3 px-4">客户</th>
+                    <th className="text-left text-gray-300 font-semibold py-3 px-4">服务</th>
+                    <th className="text-left text-gray-300 font-semibold py-3 px-4">状态</th>
+                    <th className="text-right text-gray-300 font-semibold py-3 px-4">定金</th>
+                    <th className="text-right text-gray-300 font-semibold py-3 px-4">尾款</th>
+                    <th className="text-right text-gray-300 font-semibold py-3 px-4">总价</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookings.map(booking => {
+                    const totalPrice = calculateTotalPrice(booking);
+                    return (
+                      <tr key={booking.id} className="border-b border-white/10 hover:bg-white/5 transition-all">
+                        <td className="py-3 px-4 text-white">{booking.date}</td>
+                        <td className="py-3 px-4 text-white">{booking.customer_name}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            booking.service_type === '接机' 
+                              ? 'bg-green-500/20 text-green-300' 
+                              : booking.service_type === '送机'
+                              ? 'bg-orange-500/20 text-orange-300'
+                              : 'bg-purple-500/20 text-purple-300'
+                          }`}>
+                            {booking.service_type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusConfig[booking.status || '待服务'].color}`}>
+                            {statusConfig[booking.status || '待服务'].label}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right text-gray-300">¥{(parseFloat(booking.deposit) || 0).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right text-gray-300">¥{(parseFloat(booking.balance) || 0).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right">
+                          <span className="text-green-400 font-bold text-lg">¥{totalPrice.toFixed(2)}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
