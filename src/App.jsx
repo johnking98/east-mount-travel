@@ -1250,15 +1250,6 @@ const EastMountTravelSystem = () => {
                 )}
               </div>
             ) : (
-              /* 日程视图代码继续... */
-              <div>日程视图</div>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Modals 继续... */}
-            ) : (
               // 日程视图
               <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl p-8 border border-white/20">
                 <div className="flex items-center justify-between mb-6">
@@ -1466,7 +1457,6 @@ const EastMountTravelSystem = () => {
         )}
       </div>
 
-      {/* Modals 继续... */}
       {/* 订单表单 Modal */}
       {showForm && (
         <OrderFormModal
