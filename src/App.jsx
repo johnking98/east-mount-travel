@@ -29,6 +29,14 @@ const EastMountTravelSystem = () => {
   const [currentAfterSalesBooking, setCurrentAfterSalesBooking] = useState(null);
   const [afterSalesNotes, setAfterSalesNotes] = useState('');
   const [showFinanceReport, setShowFinanceReport] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+    showCurrentPassword: false,
+    showNewPassword: false
+  });
   const [systemSettings, setSystemSettings] = useState({
     company_name_cn: '东山国际旅游',
     company_name_en: 'East Mount Luxury Travel',
@@ -252,6 +260,79 @@ const EastMountTravelSystem = () => {
     } catch (error) {
       console.error('注册失败:', error);
       alert('注册失败: ' + error.message);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!supabase || !currentUser) {
+      alert('未登录或数据库未配置');
+      return;
+    }
+
+    // 验证原密码
+    if (!passwordForm.currentPassword) {
+      alert('请输入当前密码');
+      return;
+    }
+
+    // 验证新密码
+    if (!passwordForm.newPassword) {
+      alert('请输入新密码');
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      alert('新密码长度至少6位');
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('两次输入的新密码不一致');
+      return;
+    }
+
+    if (passwordForm.currentPassword === passwordForm.newPassword) {
+      alert('新密码不能与当前密码相同');
+      return;
+    }
+
+    try {
+      // 验证原密码
+      const { data: user } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', currentUser.id)
+        .single();
+
+      if (!user || user.password !== passwordForm.currentPassword) {
+        alert('当前密码错误');
+        return;
+      }
+
+      // 更新密码
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          password: passwordForm.newPassword,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentUser.id);
+
+      if (error) throw error;
+
+      alert('密码修改成功！');
+      setShowChangePassword(false);
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+        showCurrentPassword: false,
+        showNewPassword: false
+      });
+    } catch (error) {
+      console.error('修改密码失败:', error);
+      alert('修改密码失败: ' + error.message);
     }
   };
 
@@ -589,6 +670,13 @@ const EastMountTravelSystem = () => {
   const calculateTotalPrice = (booking) => {
     const deposit = parseFloat(booking.deposit) || 0;
     const balance = parseFloat(booking.balance) || 0;
+    
+    // 如果订单已取消，只计算定金
+    if (booking.status === '已取消') {
+      return deposit;
+    }
+    
+    // 其他状态计算定金+尾款
     return deposit + balance;
   };
 
@@ -882,6 +970,13 @@ const EastMountTravelSystem = () => {
                 </div>
               </div>
               <button
+                onClick={() => setShowChangePassword(true)}
+                className="bg-cyan-500/20 hover:bg-cyan-500/30 backdrop-blur-sm text-cyan-200 px-6 py-3 rounded-xl font-semibold flex items-center space-x-2 transition-all border border-cyan-400/30"
+              >
+                <Settings className="w-5 h-5" />
+                <span>修改密码</span>
+              </button>
+              <button
                 onClick={() => {
                   setIsLoggedIn(false);
                   setCurrentUser(null);
@@ -913,6 +1008,16 @@ const EastMountTravelSystem = () => {
                 订单列表
               </button>
               <button
+                onClick={() => setActiveView('schedule')}
+                className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                  activeView === 'schedule' 
+                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
+                    : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                }`}
+              >
+                日程视图
+              </button>
+              <button
                 onClick={() => setActiveView('calendar')}
                 className={`px-6 py-3 rounded-xl font-medium transition-all ${
                   activeView === 'calendar' 
@@ -920,7 +1025,7 @@ const EastMountTravelSystem = () => {
                     : 'bg-white/10 text-gray-300 hover:bg-white/20'
                 }`}
               >
-                日程视图
+                日历视图
               </button>
             </div>
             <div className="flex space-x-4">
@@ -1028,7 +1133,7 @@ const EastMountTravelSystem = () => {
         </div>
 
         {/* 订单列表/日程视图继续... */}
-        {/* 主内容区域 - 订单列表/日程视图 */}
+        {/* 主内容区域 - 三个独立视图 */}
         {loading && activeView === 'list' ? (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl p-16 text-center border border-white/20">
             <div className="animate-spin w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -1036,7 +1141,8 @@ const EastMountTravelSystem = () => {
           </div>
         ) : (
           <>
-            {activeView === 'list' ? (
+            {/* 视图1: 订单列表 */}
+            {activeView === 'list' && (
               <div className="space-y-4">
                 {filteredBookings.length === 0 ? (
                   <div className="bg-white/5 backdrop-blur-md rounded-2xl shadow-xl p-16 text-center border border-white/10">
@@ -1256,213 +1362,215 @@ const EastMountTravelSystem = () => {
                   })
                 )}
               </div>
-            ) : (
-              // 日程视图
+            )}
+
+            {/* 视图2: 日程视图 */}
+            {activeView === 'schedule' && (
               <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl p-8 border border-white/20">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-white flex items-center">
                     <Calendar className="w-6 h-6 mr-3 text-cyan-400" />
                     日程安排
                   </h2>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setCalendarView('schedule')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                        calendarView === 'schedule'
-                          ? 'bg-cyan-500 text-white'
-                          : 'bg-white/10 text-gray-300 hover:bg-white/20'
-                      }`}
-                    >
-                      列表视图
-                    </button>
-                    <button
-                      onClick={() => setCalendarView('calendar')}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                        calendarView === 'calendar'
-                          ? 'bg-cyan-500 text-white'
-                          : 'bg-white/10 text-gray-300 hover:bg-white/20'
-                      }`}
-                    >
-                      日历视图
-                    </button>
-                  </div>
                 </div>
 
-                {calendarView === 'schedule' ? (
-                  Object.keys(groupedByDate).length === 0 ? (
-                    <div className="text-center py-16">
-                      <Calendar className="w-20 h-20 text-gray-500 mx-auto mb-4" />
-                      <p className="text-gray-400 text-xl">暂无日程安排</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-8">
-                      {Object.keys(groupedByDate).sort().map(date => (
-                        <div key={date}>
-                          <div className="flex items-center mb-4">
-                            <div className="bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-2 rounded-xl">
-                              <h3 className="text-lg font-bold text-white">{date}</h3>
-                            </div>
-                            <div className="flex-1 h-px bg-gradient-to-r from-cyan-500/50 to-transparent ml-4"></div>
+                {Object.keys(groupedByDate).length === 0 ? (
+                  <div className="text-center py-16">
+                    <Calendar className="w-20 h-20 text-gray-500 mx-auto mb-4" />
+                    <p className="text-gray-400 text-xl">暂无日程安排</p>
+                  </div>
+                ) : (
+                  <div className="space-y-8">
+                    {Object.keys(groupedByDate).sort().map(date => (
+                      <div key={date}>
+                        <div className="flex items-center mb-4">
+                          <div className="bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-2 rounded-xl">
+                            <h3 className="text-lg font-bold text-white">{date}</h3>
                           </div>
-                          <div className="space-y-3 ml-4">
-                            {groupedByDate[date].map(booking => {
-                              const totalPrice = calculateTotalPrice(booking);
-                              const StatusIcon = statusConfig[booking.status || '待服务'].icon;
-                              return (
-                                <div key={booking.id} className="bg-white/5 rounded-xl p-5 border-l-4 border-cyan-400 hover:bg-white/10 transition-all">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-6 flex-1">
-                                      <div className="text-center">
-                                        <div className="text-2xl font-bold text-white">{booking.time}</div>
-                                        {booking.end_time && (
-                                          <div className="text-sm text-gray-400">→ {booking.end_time}</div>
-                                        )}
-                                        {booking.service_type === '包车' && booking.end_date && (
-                                          <div className="text-xs text-purple-300 mt-1 bg-purple-500/20 px-2 py-0.5 rounded">
-                                            至 {booking.end_date}
-                                          </div>
-                                        )}
-                                        <div className={`text-sm font-medium mt-1 ${
-                                          booking.service_type === '接机' ? 'text-green-400' : 
-                                          booking.service_type === '送机' ? 'text-orange-400' : 'text-purple-400'
-                                        }`}>
-                                          {booking.service_type}
+                          <div className="flex-1 h-px bg-gradient-to-r from-cyan-500/50 to-transparent ml-4"></div>
+                        </div>
+                        <div className="space-y-3 ml-4">
+                          {groupedByDate[date].map(booking => {
+                            const totalPrice = calculateTotalPrice(booking);
+                            const StatusIcon = statusConfig[booking.status || '待服务'].icon;
+                            return (
+                              <div key={booking.id} className="bg-white/5 rounded-xl p-5 border-l-4 border-cyan-400 hover:bg-white/10 transition-all">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-6 flex-1">
+                                    <div className="text-center">
+                                      <div className="text-2xl font-bold text-white">{booking.time}</div>
+                                      {booking.end_time && (
+                                        <div className="text-sm text-gray-400">→ {booking.end_time}</div>
+                                      )}
+                                      {booking.service_type === '包车' && booking.end_date && (
+                                        <div className="text-xs text-purple-300 mt-1 bg-purple-500/20 px-2 py-0.5 rounded">
+                                          至 {booking.end_date}
                                         </div>
-                                      </div>
-                                      <div className="h-12 w-px bg-white/20"></div>
-                                      <div className="flex-1">
-                                        <div className="text-white font-semibold text-lg">
-                                          {booking.pickup} → {booking.dropoff}
-                                        </div>
-                                        <div className="flex items-center space-x-4 mt-2 text-sm flex-wrap">
-                                          <span className="text-blue-300">{booking.customer_name}</span>
-                                          <span className="text-gray-400">•</span>
-                                          <span className="text-gray-400">{booking.passengers}人</span>
-                                          {booking.child_count && (
-                                            <>
-                                              <span className="text-gray-400">•</span>
-                                              <span className="text-gray-400">{booking.child_count}儿童</span>
-                                            </>
-                                          )}
-                                          <span className="text-gray-400">•</span>
-                                          <span className="text-gray-400">{booking.luggage}件行李</span>
-                                          {totalPrice > 0 && (
-                                            <>
-                                              <span className="text-gray-400">•</span>
-                                              <span className="text-green-400 font-semibold">¥{totalPrice.toFixed(2)}</span>
-                                            </>
-                                          )}
-                                          <span className="text-gray-400">•</span>
-                                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusConfig[booking.status || '待服务'].color}`}>
-                                            {statusConfig[booking.status || '待服务'].label}
-                                          </span>
-                                        </div>
+                                      )}
+                                      <div className={`text-sm font-medium mt-1 ${
+                                        booking.service_type === '接机' ? 'text-green-400' : 
+                                        booking.service_type === '送机' ? 'text-orange-400' : 'text-purple-400'
+                                      }`}>
+                                        {booking.service_type}
                                       </div>
                                     </div>
-                                    {currentUser.role === 'admin' && (
-                                      <div className="flex space-x-2">
-                                        <button
-                                          onClick={() => handleEdit(booking)}
-                                          className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg transition-all"
-                                        >
-                                          <Edit2 className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleDelete(booking.id)}
-                                          className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-all"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </button>
+                                    <div className="h-12 w-px bg-white/20"></div>
+                                    <div className="flex-1">
+                                      <div className="text-white font-semibold text-lg">
+                                        {booking.pickup} → {booking.dropoff}
                                       </div>
-                                    )}
+                                      <div className="flex items-center space-x-4 mt-2 text-sm flex-wrap">
+                                        <span className="text-blue-300">{booking.customer_name}</span>
+                                        <span className="text-gray-400">•</span>
+                                        <span className="text-gray-400">{booking.passengers}人</span>
+                                        {booking.child_count && (
+                                          <>
+                                            <span className="text-gray-400">•</span>
+                                            <span className="text-gray-400">{booking.child_count}儿童</span>
+                                          </>
+                                        )}
+                                        <span className="text-gray-400">•</span>
+                                        <span className="text-gray-400">{booking.luggage}件行李</span>
+                                        {totalPrice > 0 && (
+                                          <>
+                                            <span className="text-gray-400">•</span>
+                                            <span className="text-green-400 font-semibold">¥{totalPrice.toFixed(2)}</span>
+                                          </>
+                                        )}
+                                        <span className="text-gray-400">•</span>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusConfig[booking.status || '待服务'].color}`}>
+                                          {statusConfig[booking.status || '待服务'].label}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                ) : (
-                  // 日历视图
-                  <div>
-                    <div className="flex items-center justify-between mb-6">
-                      <button
-                        onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
-                        className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
-                      >
-                        <ChevronLeft className="w-6 h-6 text-white" />
-                      </button>
-                      <h3 className="text-2xl font-bold text-white">
-                        {currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月
-                      </h3>
-                      <button
-                        onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
-                        className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
-                      >
-                        <ChevronRight className="w-6 h-6 text-white" />
-                      </button>
-                    </div>
-                    
-                    <div className="grid grid-cols-7 gap-2">
-                      {['日', '一', '二', '三', '四', '五', '六'].map(day => (
-                        <div key={day} className="text-center text-gray-400 font-semibold py-3">
-                          {day}
-                        </div>
-                      ))}
-                      {getDaysInMonth(currentMonth).map((day, index) => {
-                        const dayBookings = getBookingsForDate(day);
-                        const isToday = day && 
-                          currentMonth.getFullYear() === new Date().getFullYear() &&
-                          currentMonth.getMonth() === new Date().getMonth() &&
-                          day === new Date().getDate();
-                        
-                        return (
-                          <div
-                            key={index}
-                            className={`min-h-[100px] p-2 rounded-lg border transition-all ${
-                              day
-                                ? dayBookings.length > 0
-                                  ? 'bg-cyan-500/20 border-cyan-400/50 hover:bg-cyan-500/30 cursor-pointer'
-                                  : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                : 'bg-transparent border-transparent'
-                            } ${isToday ? 'ring-2 ring-amber-400' : ''}`}
-                          >
-                            {day && (
-                              <>
-                                <div className={`text-sm font-semibold mb-1 ${
-                                  isToday ? 'text-amber-400' : 'text-white'
-                                }`}>
-                                  {day}
-                                </div>
-                                {dayBookings.length > 0 && (
-                                  <div className="space-y-1">
-                                    {dayBookings.slice(0, 2).map(booking => (
-                                      <div
-                                        key={booking.id}
-                                        className="text-xs bg-blue-500/30 text-blue-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-blue-500/50 transition-all"
+                                  {currentUser.role === 'admin' && (
+                                    <div className="flex space-x-2">
+                                      <button
                                         onClick={() => handleEdit(booking)}
-                                        title={`${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`}
+                                        className="p-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-lg transition-all"
                                       >
-                                        {booking.time} {booking.customer_name}
-                                      </div>
-                                    ))}
-                                    {dayBookings.length > 2 && (
-                                      <div className="text-xs text-cyan-300 px-2">
-                                        +{dayBookings.length - 2} 更多
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDelete(booking.id)}
+                                        className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-lg transition-all"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* 视图3: 日历视图 */}
+            {activeView === 'calendar' && (
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl p-8 border border-white/20">
+                <div className="flex items-center justify-between mb-6">
+                  <button
+                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
+                    className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                  >
+                    <ChevronLeft className="w-6 h-6 text-white" />
+                  </button>
+                  <h3 className="text-2xl font-bold text-white">
+                    {currentMonth.getFullYear()}年 {currentMonth.getMonth() + 1}月
+                  </h3>
+                  <button
+                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
+                    className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
+                  >
+                    <ChevronRight className="w-6 h-6 text-white" />
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-7 gap-2">
+                  {['日', '一', '二', '三', '四', '五', '六'].map(day => (
+                    <div key={day} className="text-center text-gray-400 font-semibold py-3">
+                      {day}
+                    </div>
+                  ))}
+                  {getDaysInMonth(currentMonth).map((day, index) => {
+                    const dayBookings = getBookingsForDate(day).filter(b => b.status !== '已取消'); // 过滤已取消订单
+                    const cancelledBookings = getBookingsForDate(day).filter(b => b.status === '已取消'); // 已取消订单
+                    const isToday = day && 
+                      currentMonth.getFullYear() === new Date().getFullYear() &&
+                      currentMonth.getMonth() === new Date().getMonth() &&
+                      day === new Date().getDate();
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={`min-h-[100px] p-2 rounded-lg border transition-all ${
+                          day
+                            ? dayBookings.length > 0 || cancelledBookings.length > 0
+                              ? 'bg-cyan-500/20 border-cyan-400/50 hover:bg-cyan-500/30 cursor-pointer'
+                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                            : 'bg-transparent border-transparent'
+                        } ${isToday ? 'ring-2 ring-amber-400' : ''}`}
+                      >
+                        {day && (
+                          <>
+                            <div className={`text-sm font-semibold mb-1 ${
+                              isToday ? 'text-amber-400' : 'text-white'
+                            }`}>
+                              {day}
+                            </div>
+                            {/* 正常订单 */}
+                            {dayBookings.length > 0 && (
+                              <div className="space-y-1">
+                                {dayBookings.slice(0, 2).map(booking => (
+                                  <div
+                                    key={booking.id}
+                                    className="text-xs bg-blue-500/30 text-blue-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-blue-500/50 transition-all"
+                                    onClick={() => handleEdit(booking)}
+                                    title={`${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`}
+                                  >
+                                    {booking.time} {booking.customer_name}
+                                  </div>
+                                ))}
+                                {dayBookings.length > 2 && (
+                                  <div className="text-xs text-cyan-300 px-2">
+                                    +{dayBookings.length - 2} 更多
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {/* 已取消订单 - 红色标记 */}
+                            {cancelledBookings.length > 0 && (
+                              <div className="space-y-1 mt-1">
+                                {cancelledBookings.slice(0, 1).map(booking => (
+                                  <div
+                                    key={booking.id}
+                                    className="text-xs bg-red-500/30 text-red-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-red-500/50 transition-all"
+                                    onClick={() => handleEdit(booking)}
+                                    title={`[已取消] ${booking.time} ${booking.customer_name}`}
+                                  >
+                                    [已取消] {booking.customer_name}
+                                  </div>
+                                ))}
+                                {cancelledBookings.length > 1 && (
+                                  <div className="text-xs text-red-300 px-2">
+                                    +{cancelledBookings.length - 1} 已取消
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </>
@@ -1593,6 +1701,25 @@ const EastMountTravelSystem = () => {
           calculateTotalPrice={calculateTotalPrice}
           statusConfig={statusConfig}
           onClose={() => setShowFinanceReport(false)}
+        />
+      )}
+
+      {/* 修改密码 Modal */}
+      {showChangePassword && (
+        <ChangePasswordModal
+          passwordForm={passwordForm}
+          setPasswordForm={setPasswordForm}
+          onSubmit={handleChangePassword}
+          onClose={() => {
+            setShowChangePassword(false);
+            setPasswordForm({
+              currentPassword: '',
+              newPassword: '',
+              confirmPassword: '',
+              showCurrentPassword: false,
+              showNewPassword: false
+            });
+          }}
         />
       )}
 
@@ -2331,6 +2458,137 @@ const FinanceReportModal = ({ bookings, calculateTotalPrice, statusConfig, onClo
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// 修改密码 Modal 组件
+const ChangePasswordModal = ({ passwordForm, setPasswordForm, onSubmit, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl shadow-2xl max-w-md w-full border border-white/20">
+        <div className="bg-gradient-to-r from-cyan-600 to-blue-500 px-8 py-6 flex items-center justify-between">
+          <h2 className="text-3xl font-bold text-white flex items-center">
+            <Settings className="w-8 h-8 mr-3" />
+            修改密码
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition-all"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+        
+        <form onSubmit={onSubmit} className="p-8">
+          <div className="space-y-6">
+            {/* 当前密码 */}
+            <div>
+              <label className="block text-gray-300 font-medium mb-2">当前密码</label>
+              <div className="relative">
+                <input
+                  type={passwordForm.showCurrentPassword ? "text" : "password"}
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                  placeholder="请输入当前密码"
+                  required
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPasswordForm({...passwordForm, showCurrentPassword: !passwordForm.showCurrentPassword})}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-all"
+                >
+                  {passwordForm.showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* 新密码 */}
+            <div>
+              <label className="block text-gray-300 font-medium mb-2">新密码</label>
+              <div className="relative">
+                <input
+                  type={passwordForm.showNewPassword ? "text" : "password"}
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                  placeholder="请输入新密码（至少6位）"
+                  required
+                  minLength={6}
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPasswordForm({...passwordForm, showNewPassword: !passwordForm.showNewPassword})}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-all"
+                >
+                  {passwordForm.showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* 确认新密码 */}
+            <div>
+              <label className="block text-gray-300 font-medium mb-2">确认新密码</label>
+              <input
+                type={passwordForm.showNewPassword ? "text" : "password"}
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                placeholder="请再次输入新密码"
+                required
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              />
+            </div>
+
+            {/* 密码强度提示 */}
+            {passwordForm.newPassword && (
+              <div className="bg-cyan-500/10 border border-cyan-400/30 rounded-xl p-4">
+                <p className="text-cyan-300 text-sm">
+                  <strong>密码要求：</strong>
+                </p>
+                <ul className="text-cyan-200 text-sm mt-2 space-y-1 list-disc list-inside">
+                  <li className={passwordForm.newPassword.length >= 6 ? 'text-green-400' : ''}>
+                    至少6个字符 {passwordForm.newPassword.length >= 6 && '✓'}
+                  </li>
+                  <li className={passwordForm.newPassword === passwordForm.confirmPassword && passwordForm.confirmPassword ? 'text-green-400' : ''}>
+                    两次密码输入一致 {passwordForm.newPassword === passwordForm.confirmPassword && passwordForm.confirmPassword && '✓'}
+                  </li>
+                  <li className={passwordForm.currentPassword !== passwordForm.newPassword && passwordForm.newPassword ? 'text-green-400' : ''}>
+                    不同于当前密码 {passwordForm.currentPassword !== passwordForm.newPassword && passwordForm.newPassword && '✓'}
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            {/* 忘记密码提示 */}
+            <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-4">
+              <p className="text-amber-300 text-sm">
+                <strong>忘记密码？</strong>
+              </p>
+              <p className="text-amber-200 text-sm mt-1">
+                请联系管理员重置密码。管理员可以通过系统后台为您重置密码。
+              </p>
+            </div>
+          </div>
+
+          {/* 按钮 */}
+          <div className="flex space-x-4 mt-8">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-6 rounded-xl transition-all"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+            >
+              确认修改
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
