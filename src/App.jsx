@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, Search, Download, Edit2, Trash2, Car, Users, Briefcase, MapPin, Phone, Clock, X, LogOut, Eye, EyeOff, Shield, User, Settings, UserPlus, Check, XCircle, DollarSign, ChevronLeft, ChevronRight, Route, AlertCircle, CheckCircle, Ban, MessageSquare } from 'lucide-react';
+import { Calendar, Plus, Search, Download, Edit2, Trash2, Car, Users, Briefcase, MapPin, Phone, Clock, X, LogOut, Eye, EyeOff, Shield, User, Settings, UserPlus, Check, XCircle, DollarSign, ChevronLeft, ChevronRight, Route, AlertCircle, CheckCircle, Ban, MessageSquare, Menu } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase 配置
@@ -47,6 +47,7 @@ const EastMountTravelSystem = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [showDayBookings, setShowDayBookings] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   
   const [formData, setFormData] = useState({
     serviceType: '接机',
@@ -901,27 +902,31 @@ const EastMountTravelSystem = () => {
 
   // 主界面继续...
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900" style={{ fontFamily: "'Outfit', 'Noto Sans SC', sans-serif" }}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 overflow-x-hidden" style={{ fontFamily: "'Outfit', 'Noto Sans SC', sans-serif" }}>
+      {/* Viewport meta tag for mobile */}
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
       
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-cyan-500 shadow-2xl border-b-4 border-amber-400">
-        <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="bg-gradient-to-r from-blue-600 to-cyan-500 shadow-2xl border-b-2 sm:border-b-4 border-amber-400">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 md:py-8">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {systemSettings.logo_url ? (
-                <img src={systemSettings.logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-cover border-2 border-white/30" />
+                <img src={systemSettings.logo_url} alt="Logo" className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover border-2 border-white/30" />
               ) : (
-                <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl">
-                  <Car className="w-10 h-10 text-white" />
+                <div className="bg-white/20 backdrop-blur-sm p-2 sm:p-3 rounded-xl sm:rounded-2xl">
+                  <Car className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 text-white" />
                 </div>
               )}
               <div>
-                <h1 className="text-4xl font-bold text-white tracking-tight">{systemSettings.company_name_cn}</h1>
-                <p className="text-blue-100 mt-1 text-lg tracking-wide">{systemSettings.company_name_en}</p>
+                <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white tracking-tight whitespace-nowrap">{systemSettings.company_name_cn}</h1>
+                <p className="text-blue-100 mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base lg:text-lg tracking-wide hidden sm:block">{systemSettings.company_name_en}</p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
+            
+            {/* 桌面端按钮 - 大屏幕显示 */}
+            <div className="hidden lg:flex items-center space-x-3">
               {currentUser.role === 'admin' && (
                 <>
                   <button
@@ -997,19 +1002,151 @@ const EastMountTravelSystem = () => {
                 <span>退出</span>
               </button>
             </div>
+
+            {/* 移动端汉堡菜单按钮 */}
+            <button
+              onClick={() => setShowMobileMenu(true)}
+              className="lg:hidden bg-white/20 hover:bg-white/30 backdrop-blur-sm p-3 rounded-xl transition-all border border-white/30"
+            >
+              <Menu className="w-6 h-6 text-white" />
+            </button>
           </div>
         </div>
       </div>
 
+      {/* 移动端菜单面板 */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 lg:hidden" onClick={() => setShowMobileMenu(false)}>
+          <div className="fixed right-0 top-0 bottom-0 w-80 max-w-[85vw] bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {/* 菜单头部 */}
+            <div className="bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-5 flex items-center justify-between border-b-2 border-amber-400">
+              <h2 className="text-xl font-bold text-white">菜单</h2>
+              <button
+                onClick={() => setShowMobileMenu(false)}
+                className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+
+            {/* 用户信息 */}
+            <div className="px-6 py-5 border-b border-white/10">
+              <div className="flex items-center space-x-3">
+                {currentUser.role === 'admin' ? (
+                  <Shield className="w-8 h-8 text-amber-300" />
+                ) : (
+                  <User className="w-8 h-8 text-blue-300" />
+                )}
+                <div>
+                  <p className="text-white font-semibold text-lg">{currentUser.display_name}</p>
+                  <p className="text-blue-200 text-sm">{currentUser.role === 'admin' ? '管理员' : '查看者'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 菜单项 */}
+            <div className="px-4 py-4 space-y-2">
+              {currentUser.role === 'admin' && (
+                <>
+                  <button
+                    onClick={() => {
+                      setShowSettings(true);
+                      setShowMobileMenu(false);
+                    }}
+                    className="w-full bg-white/10 hover:bg-white/20 text-white px-5 py-4 rounded-xl font-medium flex items-center space-x-3 transition-all border border-white/20"
+                  >
+                    <Settings className="w-5 h-5" />
+                    <span>系统设置</span>
+                  </button>
+                  
+                  {pendingUsers.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowPendingUsers(true);
+                        setShowMobileMenu(false);
+                      }}
+                      className="w-full bg-green-500/20 hover:bg-green-500/30 text-green-200 px-5 py-4 rounded-xl font-medium flex items-center justify-between transition-all border border-green-400/30"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <UserPlus className="w-5 h-5" />
+                        <span>用户审核</span>
+                      </div>
+                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
+                        {pendingUsers.length}
+                      </span>
+                    </button>
+                  )}
+                  
+                  {permissionRequests.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowPermissionRequests(true);
+                        setShowMobileMenu(false);
+                      }}
+                      className="w-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-5 py-4 rounded-xl font-medium flex items-center justify-between transition-all border border-amber-400/30"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Shield className="w-5 h-5" />
+                        <span>权限申请</span>
+                      </div>
+                      <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
+                        {permissionRequests.length}
+                      </span>
+                    </button>
+                  )}
+                </>
+              )}
+              
+              {currentUser.role === 'viewer' && (
+                <button
+                  onClick={() => {
+                    handleRequestPermission();
+                    setShowMobileMenu(false);
+                  }}
+                  className="w-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-5 py-4 rounded-xl font-medium flex items-center space-x-3 transition-all border border-amber-400/30"
+                >
+                  <Shield className="w-5 h-5" />
+                  <span>申请管理员权限</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  setShowChangePassword(true);
+                  setShowMobileMenu(false);
+                }}
+                className="w-full bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 px-5 py-4 rounded-xl font-medium flex items-center space-x-3 transition-all border border-cyan-400/30"
+              >
+                <Settings className="w-5 h-5" />
+                <span>修改密码</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsLoggedIn(false);
+                  setCurrentUser(null);
+                  setShowMobileMenu(false);
+                }}
+                className="w-full bg-red-500/20 hover:bg-red-500/30 text-white px-5 py-4 rounded-xl font-medium flex items-center space-x-3 transition-all border border-red-400/30"
+              >
+                <LogOut className="w-5 h-5" />
+                <span>退出登录</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 主内容区域继续... */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 md:py-8">
         {/* Action Bar */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-2xl p-6 mb-8 border border-white/20">
+        <div className="bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 mb-6 sm:mb-8 border border-white/20">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
-            <div className="flex space-x-2">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 w-full md:w-auto">
+              <div className="flex space-x-2 min-w-max md:min-w-0">
               <button
                 onClick={() => setActiveView('list')}
-                className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
                   activeView === 'list' 
                     ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
                     : 'bg-white/10 text-gray-300 hover:bg-white/20'
@@ -1019,7 +1156,7 @@ const EastMountTravelSystem = () => {
               </button>
               <button
                 onClick={() => setActiveView('schedule')}
-                className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
                   activeView === 'schedule' 
                     ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
                     : 'bg-white/10 text-gray-300 hover:bg-white/20'
@@ -1029,7 +1166,7 @@ const EastMountTravelSystem = () => {
               </button>
               <button
                 onClick={() => setActiveView('calendar')}
-                className={`px-6 py-3 rounded-xl font-medium transition-all ${
+                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
                   activeView === 'calendar' 
                     ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
                     : 'bg-white/10 text-gray-300 hover:bg-white/20'
@@ -1038,11 +1175,12 @@ const EastMountTravelSystem = () => {
                 日历视图
               </button>
             </div>
-            <div className="flex space-x-4">
+            </div>
+            <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full md:w-auto">
               {currentUser.role === 'admin' && (
                 <button
                   onClick={() => { setShowForm(true); setEditingBooking(null); resetForm(); }}
-                  className="bg-amber-400 hover:bg-amber-500 text-blue-900 px-6 py-3 rounded-xl font-semibold flex items-center space-x-2 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  className="w-full sm:w-auto bg-amber-400 hover:bg-amber-500 text-blue-900 px-4 sm:px-6 py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl text-sm sm:text-base"
                 >
                   <Plus className="w-5 h-5" />
                   <span>新建订单</span>
@@ -1051,7 +1189,7 @@ const EastMountTravelSystem = () => {
               <button
                 onClick={handleExport}
                 disabled={bookings.length === 0}
-                className="bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-6 py-3 rounded-xl font-semibold flex items-center space-x-2 transition-all disabled:opacity-50"
+                className="w-full sm:w-auto bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-4 sm:px-6 py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 transition-all disabled:opacity-50 text-sm sm:text-base"
               >
                 <Download className="w-5 h-5" />
                 <span>导出数据</span>
@@ -1061,8 +1199,8 @@ const EastMountTravelSystem = () => {
         </div>
 
         {/* Search and Filter */}
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl shadow-2xl p-6 mb-8 border border-white/20">
-          <div className="flex space-x-4 w-full">
+        <div className="bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 mb-6 sm:mb-8 border border-white/20">
+          <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full">
             <div className="relative flex-1">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
@@ -1941,6 +2079,37 @@ const EastMountTravelSystem = () => {
       )}
 
       <style>{`
+        /* 全局防止横向滚动 */}
+        * {
+          box-sizing: border-box;
+        }
+        html, body {
+          overflow-x: hidden;
+          width: 100%;
+          position: relative;
+        }
+        
+        /* 防止文字垂直排列 */}
+        h1, h2, h3, h4, h5, h6, p, span, div {
+          writing-mode: horizontal-tb;
+          text-orientation: mixed;
+        }
+        
+        /* 确保所有容器不超出视口 */
+        .max-w-7xl {
+          max-width: 100%;
+          padding-left: 1rem;
+          padding-right: 1rem;
+        }
+        
+        @media (min-width: 640px) {
+          .max-w-7xl {
+            max-width: 1280px;
+            padding-left: 1.5rem;
+            padding-right: 1.5rem;
+          }
+        }
+        
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
