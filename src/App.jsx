@@ -45,6 +45,8 @@ const EastMountTravelSystem = () => {
   const [permissionRequests, setPermissionRequests] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showDayBookings, setShowDayBookings] = useState(false);
   
   const [formData, setFormData] = useState({
     serviceType: '接机',
@@ -64,7 +66,9 @@ const EastMountTravelSystem = () => {
     itinerary: '',
     deposit: '',
     balance: '',
-    status: '待服务'
+    status: '待服务',
+    source: '',
+    assignedTo: ''
   });
 
   // 订单状态配置
@@ -528,7 +532,9 @@ const EastMountTravelSystem = () => {
         itinerary: formData.serviceType === '包车' ? (formData.itinerary || null) : null,
         deposit: formData.deposit ? parseFloat(formData.deposit) : null,
         balance: formData.balance ? parseFloat(formData.balance) : null,
-        status: formData.status || '待服务'
+        status: formData.status || '待服务',
+        source: formData.source || null,
+        assigned_to: formData.assignedTo || null
       };
       
       if (editingBooking) {
@@ -585,7 +591,9 @@ const EastMountTravelSystem = () => {
       itinerary: '',
       deposit: '',
       balance: '',
-      status: '待服务'
+      status: '待服务',
+      source: '',
+      assignedTo: ''
     });
   };
 
@@ -612,7 +620,9 @@ const EastMountTravelSystem = () => {
       itinerary: booking.itinerary || '',
       deposit: booking.deposit || '',
       balance: booking.balance || '',
-      status: booking.status || '待服务'
+      status: booking.status || '待服务',
+      source: booking.source || '',
+      assignedTo: booking.assigned_to || ''
     });
     setEditingBooking(booking);
     setShowForm(true);
@@ -1156,7 +1166,7 @@ const EastMountTravelSystem = () => {
                     return (
                       <div key={booking.id} className="bg-white/10 backdrop-blur-md rounded-2xl shadow-xl p-6 hover:bg-white/15 transition-all border border-white/20">
                         <div className="flex justify-between items-start">
-                          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-6">
+                          <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-6">
                             <div>
                               <div className="flex items-center space-x-2 mb-3">
                                 <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ${
@@ -1231,6 +1241,25 @@ const EastMountTravelSystem = () => {
                                     <Route className="w-3 h-3 inline mr-1" />
                                     行程: {booking.itinerary}
                                   </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <p className="text-gray-400 text-sm mb-2">订单信息</p>
+                              <div className="space-y-2">
+                                {booking.source && (
+                                  <div className="bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-400/20">
+                                    <span className="text-blue-300 text-sm">来源: {booking.source}</span>
+                                  </div>
+                                )}
+                                {booking.assigned_to && (
+                                  <div className="bg-green-500/10 px-3 py-1.5 rounded-lg border border-green-400/20">
+                                    <span className="text-green-300 text-sm">负责: {booking.assigned_to}</span>
+                                  </div>
+                                )}
+                                {!booking.source && !booking.assigned_to && (
+                                  <div className="text-gray-500 text-sm">暂无</div>
                                 )}
                               </div>
                             </div>
@@ -1510,13 +1539,21 @@ const EastMountTravelSystem = () => {
                     return (
                       <div
                         key={index}
-                        className={`min-h-[100px] p-2 rounded-lg border transition-all ${
+                        className={`min-h-[120px] p-2 rounded-lg border transition-all ${
                           day
                             ? dayBookings.length > 0 || cancelledBookings.length > 0
                               ? 'bg-cyan-500/20 border-cyan-400/50 hover:bg-cyan-500/30 cursor-pointer'
-                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                              : 'bg-white/5 border-white/10'
                             : 'bg-transparent border-transparent'
                         } ${isToday ? 'ring-2 ring-amber-400' : ''}`}
+                        onClick={(e) => {
+                          // 只有在点击空白区域时才打开详情
+                          if (day && (dayBookings.length > 0 || cancelledBookings.length > 0) && e.target === e.currentTarget) {
+                            const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                            setSelectedDate(dateStr);
+                            setShowDayBookings(true);
+                          }
+                        }}
                       >
                         {day && (
                           <>
@@ -1525,44 +1562,54 @@ const EastMountTravelSystem = () => {
                             }`}>
                               {day}
                             </div>
-                            {/* 正常订单 */}
+                            {/* 正常订单 - 显示全部 */}
                             {dayBookings.length > 0 && (
-                              <div className="space-y-1">
-                                {dayBookings.slice(0, 2).map(booking => (
+                              <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                                {dayBookings.map(booking => (
                                   <div
                                     key={booking.id}
                                     className="text-xs bg-blue-500/30 text-blue-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-blue-500/50 transition-all"
-                                    onClick={() => handleEdit(booking)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(booking);
+                                    }}
                                     title={`${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`}
                                   >
                                     {booking.time} {booking.customer_name}
                                   </div>
                                 ))}
-                                {dayBookings.length > 2 && (
-                                  <div className="text-xs text-cyan-300 px-2">
-                                    +{dayBookings.length - 2} 更多
-                                  </div>
-                                )}
                               </div>
                             )}
-                            {/* 已取消订单 - 红色标记 */}
+                            {/* 已取消订单 - 显示全部 */}
                             {cancelledBookings.length > 0 && (
-                              <div className="space-y-1 mt-1">
-                                {cancelledBookings.slice(0, 1).map(booking => (
+                              <div className="space-y-1 mt-1 max-h-[100px] overflow-y-auto">
+                                {cancelledBookings.map(booking => (
                                   <div
                                     key={booking.id}
                                     className="text-xs bg-red-500/30 text-red-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-red-500/50 transition-all"
-                                    onClick={() => handleEdit(booking)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(booking);
+                                    }}
                                     title={`[已取消] ${booking.time} ${booking.customer_name}`}
                                   >
                                     [已取消] {booking.customer_name}
                                   </div>
                                 ))}
-                                {cancelledBookings.length > 1 && (
-                                  <div className="text-xs text-red-300 px-2">
-                                    +{cancelledBookings.length - 1} 已取消
-                                  </div>
-                                )}
+                              </div>
+                            )}
+                            {/* 显示订单总数 */}
+                            {(dayBookings.length + cancelledBookings.length > 0) && (
+                              <div 
+                                className="text-xs text-center mt-1 pt-1 border-t border-white/20 text-cyan-300 hover:text-cyan-100 cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                  setSelectedDate(dateStr);
+                                  setShowDayBookings(true);
+                                }}
+                              >
+                                共{dayBookings.length + cancelledBookings.length}单 · 详情
                               </div>
                             )}
                           </>
@@ -1719,6 +1766,21 @@ const EastMountTravelSystem = () => {
               showCurrentPassword: false,
               showNewPassword: false
             });
+          }}
+        />
+      )}
+
+      {/* 当天订单详情 Modal */}
+      {showDayBookings && selectedDate && (
+        <DayBookingsModal
+          date={selectedDate}
+          bookings={getBookingsForDate(parseInt(selectedDate.split('-')[2]))}
+          calculateTotalPrice={calculateTotalPrice}
+          statusConfig={statusConfig}
+          onEdit={handleEdit}
+          onClose={() => {
+            setShowDayBookings(false);
+            setSelectedDate(null);
           }}
         />
       )}
@@ -1952,6 +2014,28 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                   placeholder="例如: 13666611193"
                   className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                   required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-gray-300 font-medium mb-2">订单来源</label>
+                <input
+                  type="text"
+                  value={formData.source}
+                  onChange={(e) => setFormData({...formData, source: e.target.value})}
+                  placeholder="例如: 微信、网站、电话、推荐等"
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-gray-300 font-medium mb-2">订单分配人员</label>
+                <input
+                  type="text"
+                  value={formData.assignedTo}
+                  onChange={(e) => setFormData({...formData, assignedTo: e.target.value})}
+                  placeholder="例如: 张师傅、李师傅等"
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
                 />
               </div>
               
@@ -2589,6 +2673,229 @@ const ChangePasswordModal = ({ passwordForm, setPasswordForm, onSubmit, onClose 
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+// 当天订单详情 Modal 组件
+const DayBookingsModal = ({ date, bookings, calculateTotalPrice, statusConfig, onEdit, onClose }) => {
+  const normalBookings = bookings.filter(b => b.status !== '已取消');
+  const cancelledBookings = bookings.filter(b => b.status === '已取消');
+  
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden border border-white/20">
+        <div className="bg-gradient-to-r from-cyan-600 to-blue-500 px-8 py-6 flex items-center justify-between">
+          <h2 className="text-3xl font-bold text-white flex items-center">
+            <Calendar className="w-8 h-8 mr-3" />
+            {date} 的订单
+          </h2>
+          <button
+            onClick={onClose}
+            className="p-2 bg-white/20 hover:bg-white/30 rounded-xl transition-all"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
+        
+        <div className="p-8 overflow-y-auto max-h-[calc(90vh-100px)]">
+          {/* 统计信息 */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-blue-500/20 rounded-xl p-4 border border-blue-400/30">
+              <p className="text-blue-200 text-sm mb-1">正常订单</p>
+              <p className="text-3xl font-bold text-blue-300">{normalBookings.length}</p>
+            </div>
+            <div className="bg-red-500/20 rounded-xl p-4 border border-red-400/30">
+              <p className="text-red-200 text-sm mb-1">已取消</p>
+              <p className="text-3xl font-bold text-red-300">{cancelledBookings.length}</p>
+            </div>
+            <div className="bg-green-500/20 rounded-xl p-4 border border-green-400/30">
+              <p className="text-green-200 text-sm mb-1">总收入</p>
+              <p className="text-3xl font-bold text-green-300">
+                ¥{bookings.reduce((sum, b) => sum + calculateTotalPrice(b), 0).toFixed(2)}
+              </p>
+            </div>
+          </div>
+
+          {/* 正常订单列表 */}
+          {normalBookings.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+                <CheckCircle className="w-5 h-5 mr-2 text-green-400" />
+                正常订单 ({normalBookings.length})
+              </h3>
+              <div className="space-y-3">
+                {normalBookings.map(booking => {
+                  const totalPrice = calculateTotalPrice(booking);
+                  const StatusIcon = statusConfig[booking.status || '待服务'].icon;
+                  return (
+                    <div 
+                      key={booking.id} 
+                      className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-all cursor-pointer"
+                      onClick={() => {
+                        onEdit(booking);
+                        onClose();
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              booking.service_type === '接机' 
+                                ? 'bg-green-500/20 text-green-300 border border-green-400/30'
+                                : booking.service_type === '送机'
+                                ? 'bg-orange-500/20 text-orange-300 border border-orange-400/30'
+                                : 'bg-purple-500/20 text-purple-300 border border-purple-400/30'
+                            }`}>
+                              {booking.service_type}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusConfig[booking.status || '待服务'].color}`}>
+                              {statusConfig[booking.status || '待服务'].label}
+                            </span>
+                            <span className="text-white font-semibold text-lg">{booking.time}</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">客户：</span>
+                              <span className="text-white font-medium">{booking.customer_name}</span>
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">电话：</span>
+                              <span className="text-cyan-300">{booking.customer_phone}</span>
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">上车：</span>
+                              <span className="text-white">{booking.pickup}</span>
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">目的：</span>
+                              <span className="text-white">{booking.dropoff}</span>
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">人数：</span>
+                              <span className="text-white">{booking.passengers}人</span>
+                              {booking.child_count && <span className="text-gray-400"> ({booking.child_count}儿童)</span>}
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">行李：</span>
+                              <span className="text-white">{booking.luggage}件 ({booking.luggage_size})</span>
+                            </div>
+                            {booking.source && (
+                              <div className="text-gray-300">
+                                <span className="text-gray-400">来源：</span>
+                                <span className="text-blue-300">{booking.source}</span>
+                              </div>
+                            )}
+                            {booking.assigned_to && (
+                              <div className="text-gray-300">
+                                <span className="text-gray-400">负责：</span>
+                                <span className="text-green-300">{booking.assigned_to}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="ml-4 text-right">
+                          <div className="text-green-400 text-2xl font-bold">¥{totalPrice.toFixed(2)}</div>
+                          <div className="text-gray-400 text-xs mt-1">
+                            定金¥{(parseFloat(booking.deposit) || 0).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 已取消订单列表 */}
+          {cancelledBookings.length > 0 && (
+            <div>
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+                <Ban className="w-5 h-5 mr-2 text-red-400" />
+                已取消订单 ({cancelledBookings.length})
+              </h3>
+              <div className="space-y-3">
+                {cancelledBookings.map(booking => {
+                  const totalPrice = calculateTotalPrice(booking);
+                  return (
+                    <div 
+                      key={booking.id} 
+                      className="bg-red-500/10 rounded-xl p-4 border border-red-400/30 hover:bg-red-500/20 transition-all cursor-pointer opacity-75"
+                      onClick={() => {
+                        onEdit(booking);
+                        onClose();
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3 mb-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              booking.service_type === '接机' 
+                                ? 'bg-green-500/20 text-green-300 border border-green-400/30'
+                                : booking.service_type === '送机'
+                                ? 'bg-orange-500/20 text-orange-300 border border-orange-400/30'
+                                : 'bg-purple-500/20 text-purple-300 border border-purple-400/30'
+                            }`}>
+                              {booking.service_type}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-500/20 text-red-300 border-red-400/30">
+                              已取消
+                            </span>
+                            <span className="text-white font-semibold text-lg">{booking.time}</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">客户：</span>
+                              <span className="text-white font-medium">{booking.customer_name}</span>
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">电话：</span>
+                              <span className="text-cyan-300">{booking.customer_phone}</span>
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">上车：</span>
+                              <span className="text-white">{booking.pickup}</span>
+                            </div>
+                            <div className="text-gray-300">
+                              <span className="text-gray-400">目的：</span>
+                              <span className="text-white">{booking.dropoff}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="ml-4 text-right">
+                          <div className="text-red-400 text-2xl font-bold">¥{totalPrice.toFixed(2)}</div>
+                          <div className="text-gray-400 text-xs mt-1">仅定金</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {bookings.length === 0 && (
+            <div className="text-center py-12">
+              <Calendar className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+              <p className="text-gray-400 text-lg">当天没有订单</p>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white/5 px-8 py-4 border-t border-white/10">
+          <button
+            onClick={onClose}
+            className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-semibold py-3 rounded-xl transition-all"
+          >
+            关闭
+          </button>
+        </div>
       </div>
     </div>
   );
