@@ -48,6 +48,8 @@ const EastMountTravelSystem = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showDayBookings, setShowDayBookings] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   
   const [formData, setFormData] = useState({
     serviceType: '接机',
@@ -69,7 +71,8 @@ const EastMountTravelSystem = () => {
     balance: '',
     status: '待服务',
     source: '',
-    assignedTo: ''
+    assignedTo: '',
+    images: []  // 订单图片数组
   });
 
   // 订单状态配置
@@ -492,6 +495,99 @@ const EastMountTravelSystem = () => {
     }
   };
 
+  // 上传图片到Supabase Storage
+  const uploadImage = async (file, folder = 'booking-images') => {
+    if (!supabase) {
+      alert('未配置Supabase，无法上传图片');
+      return null;
+    }
+
+    try {
+      // 生成唯一文件名
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${folder}/${fileName}`;
+
+      // 上传文件
+      const { data, error } = await supabase.storage
+        .from('images')  // bucket名称
+        .upload(filePath, file);
+
+      if (error) throw error;
+
+      // 获取公共URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('上传图片失败:', error);
+      throw error;
+    }
+  };
+
+  // 处理订单图片上传
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploadingImage(true);
+    try {
+      const uploadPromises = files.map(file => uploadImage(file, 'booking-images'));
+      const urls = await Promise.all(uploadPromises);
+      
+      // 添加到formData的images数组
+      setFormData(prev => ({
+        ...prev,
+        images: [...(prev.images || []), ...urls]
+      }));
+
+      alert(`成功上传 ${files.length} 张图片`);
+    } catch (error) {
+      alert('上传图片失败: ' + error.message);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // 删除订单图片
+  const handleRemoveImage = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
+  };
+
+  // 处理Logo上传
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingLogo(true);
+    try {
+      const url = await uploadImage(file, 'logos');
+      
+      // 保存到数据库
+      if (supabase) {
+        const { error } = await supabase
+          .from('system_settings')
+          .update({ logo_url: url })
+          .eq('id', 1);
+
+        if (error) throw error;
+      }
+
+      // 更新本地状态
+      setSystemSettings(prev => ({ ...prev, logo_url: url }));
+      alert('Logo上传成功！');
+    } catch (error) {
+      alert('上传Logo失败: ' + error.message);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (currentUser.role !== 'admin') {
@@ -535,7 +631,8 @@ const EastMountTravelSystem = () => {
         balance: formData.balance ? parseFloat(formData.balance) : null,
         status: formData.status || '待服务',
         source: formData.source || null,
-        assigned_to: formData.assignedTo || null
+        assigned_to: formData.assignedTo || null,
+        images: formData.images || []  // 图片数组
       };
       
       if (editingBooking) {
@@ -594,7 +691,8 @@ const EastMountTravelSystem = () => {
       balance: '',
       status: '待服务',
       source: '',
-      assignedTo: ''
+      assignedTo: '',
+      images: []
     });
   };
 
@@ -623,7 +721,8 @@ const EastMountTravelSystem = () => {
       balance: booking.balance || '',
       status: booking.status || '待服务',
       source: booking.source || '',
-      assignedTo: booking.assigned_to || ''
+      assignedTo: booking.assigned_to || '',
+      images: booking.images || []
     });
     setEditingBooking(booking);
     setShowForm(true);
@@ -1930,6 +2029,9 @@ const EastMountTravelSystem = () => {
             setEditingBooking(null);
             resetForm();
           }}
+          uploadingImage={uploadingImage}
+          onImageUpload={handleImageUpload}
+          onRemoveImage={handleRemoveImage}
         />
       )}
 
@@ -2011,6 +2113,8 @@ const EastMountTravelSystem = () => {
           settings={systemSettings}
           onSave={handleUpdateSettings}
           onClose={() => setShowSettings(false)}
+          uploadingLogo={uploadingLogo}
+          onLogoUpload={handleLogoUpload}
         />
       )}
 
@@ -2135,7 +2239,7 @@ const EastMountTravelSystem = () => {
 
 // 组件定义继续...
 // 订单表单 Modal 组件
-const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose }) => {
+const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose, uploadingImage, onImageUpload, onRemoveImage }) => {
   const totalPrice = (parseFloat(formData.deposit) || 0) + (parseFloat(formData.balance) || 0);
   const isCharterService = formData.serviceType === '包车';
 
@@ -2426,6 +2530,72 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
               )}
             </div>
             
+            {/* 图片上传区域 */}
+            <div className="mt-6 p-4 sm:p-6 bg-white/5 rounded-xl border border-white/10">
+              <label className="block text-gray-300 font-medium mb-3 text-sm sm:text-base">
+                📷 订单图片（选填）
+              </label>
+              <p className="text-gray-400 text-xs sm:text-sm mb-4">
+                可以上传订单相关图片，如行李照片、客户要求截图等
+              </p>
+              
+              {/* 上传按钮 */}
+              <div className="mb-4">
+                <label className="inline-flex items-center px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 rounded-xl cursor-pointer transition-all border border-blue-400/30 text-sm sm:text-base">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={onImageUpload}
+                    disabled={uploadingImage}
+                    className="hidden"
+                  />
+                  {uploadingImage ? (
+                    <>
+                      <div className="animate-spin w-5 h-5 border-2 border-blue-300 border-t-transparent rounded-full mr-2" />
+                      <span>上传中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5 mr-2" />
+                      <span>选择图片</span>
+                    </>
+                  )}
+                </label>
+                <p className="text-gray-500 text-xs mt-2">
+                  支持JPG、PNG格式，可一次选择多张
+                </p>
+              </div>
+
+              {/* 图片预览 */}
+              {formData.images && formData.images.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {formData.images.map((url, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={url}
+                        alt={`订单图片 ${index + 1}`}
+                        className="w-full h-24 sm:h-32 object-cover rounded-lg border border-white/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onRemoveImage(index)}
+                        className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {formData.images && formData.images.length === 0 && (
+                <div className="text-center py-8 text-gray-500 text-sm">
+                  暂无图片
+                </div>
+              )}
+            </div>
+            
             <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-4 border-t border-white/10">
               <button
                 type="button"
@@ -2451,7 +2621,7 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
 
 // 其他Modal组件继续...
 // 设置 Modal 组件
-const SettingsModal = ({ settings, onSave, onClose }) => {
+const SettingsModal = ({ settings, onSave, onClose, uploadingLogo, onLogoUpload }) => {
   const [formData, setFormData] = useState(settings);
 
   return (
@@ -2492,17 +2662,33 @@ const SettingsModal = ({ settings, onSave, onClose }) => {
           </div>
 
           <div>
-            <label className="block text-gray-300 font-medium mb-2">Logo URL</label>
-            <input
-              type="text"
-              value={formData.logo_url || ''}
-              onChange={(e) => setFormData({...formData, logo_url: e.target.value})}
-              placeholder="https://example.com/logo.png"
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
-            <p className="text-gray-400 text-sm mt-2">
-              💡 提示：将Logo图片上传到图床（如imgbb.com），然后粘贴图片链接
-            </p>
+            <label className="block text-gray-300 font-medium mb-2">公司Logo</label>
+            <div className="space-y-4">
+              {/* 上传按钮 */}
+              <label className="inline-flex items-center px-6 py-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-xl cursor-pointer transition-all border border-purple-400/30">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={onLogoUpload}
+                  disabled={uploadingLogo}
+                  className="hidden"
+                />
+                {uploadingLogo ? (
+                  <>
+                    <div className="animate-spin w-5 h-5 border-2 border-purple-300 border-t-transparent rounded-full mr-2" />
+                    <span>上传中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5 mr-2" />
+                    <span>选择Logo图片</span>
+                  </>
+                )}
+              </label>
+              <p className="text-gray-400 text-sm">
+                💡 推荐尺寸：200x200像素，支持JPG、PNG格式
+              </p>
+            </div>
           </div>
 
           {formData.logo_url && (
@@ -2517,7 +2703,7 @@ const SettingsModal = ({ settings, onSave, onClose }) => {
                   e.target.nextSibling.style.display = 'block';
                 }}
               />
-              <div className="hidden text-red-300 text-sm mt-2">⚠️ 图片加载失败，请检查URL</div>
+              <div className="hidden text-red-300 text-sm mt-2">⚠️ 图片加载失败</div>
             </div>
           )}
 
