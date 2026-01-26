@@ -50,6 +50,9 @@ const EastMountTravelSystem = () => {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [viewingImage, setViewingImage] = useState(null); // 查看大图
+  const [rememberMe, setRememberMe] = useState(false); // 记住密码
+  const [autoLogin, setAutoLogin] = useState(false); // 自动登录
   
   const [formData, setFormData] = useState({
     serviceType: '接机',
@@ -100,6 +103,60 @@ const EastMountTravelSystem = () => {
       console.error('加载系统设置失败:', error);
     }
   };
+
+  // 自动登录
+  useEffect(() => {
+    const savedAutoLogin = localStorage.getItem('autoLogin') === 'true';
+    const savedUsername = localStorage.getItem('savedUsername');
+    const savedPassword = localStorage.getItem('savedPassword');
+    
+    if (savedAutoLogin && savedUsername && savedPassword) {
+      // 自动执行登录
+      setLoginForm({ 
+        username: savedUsername, 
+        password: savedPassword, 
+        showPassword: false 
+      });
+      setAutoLogin(true);
+      setRememberMe(true);
+      
+      // 延迟执行登录，确保状态已设置
+      setTimeout(async () => {
+        if (!supabase) return;
+        
+        try {
+          const { data: users, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('username', savedUsername)
+            .eq('password', savedPassword)
+            .eq('status', 'approved');
+
+          if (error) throw error;
+
+          if (users && users.length > 0) {
+            const user = users[0];
+            setCurrentUser(user);
+            setIsLoggedIn(true);
+          }
+        } catch (error) {
+          console.error('自动登录失败:', error);
+          // 如果自动登录失败，清除保存的信息
+          localStorage.removeItem('autoLogin');
+          localStorage.removeItem('savedUsername');
+          localStorage.removeItem('savedPassword');
+        }
+      }, 100);
+    } else if (savedUsername && savedPassword) {
+      // 只记住密码，不自动登录
+      setLoginForm({ 
+        username: savedUsername, 
+        password: savedPassword, 
+        showPassword: false 
+      });
+      setRememberMe(true);
+    }
+  }, [supabase]);
 
   // 加载数据
   useEffect(() => {
@@ -210,6 +267,21 @@ const EastMountTravelSystem = () => {
       if (data.status !== 'active') {
         alert('您的账号状态异常，请联系管理员');
         return;
+      }
+
+      // 保存登录信息
+      if (rememberMe) {
+        localStorage.setItem('savedUsername', loginForm.username);
+        localStorage.setItem('savedPassword', loginForm.password);
+      } else {
+        localStorage.removeItem('savedUsername');
+        localStorage.removeItem('savedPassword');
+      }
+
+      if (autoLogin) {
+        localStorage.setItem('autoLogin', 'true');
+      } else {
+        localStorage.removeItem('autoLogin');
       }
 
       setCurrentUser(data);
@@ -894,6 +966,63 @@ const EastMountTravelSystem = () => {
                 </div>
               </div>
 
+              {/* 记住密码和自动登录 */}
+              <div className="space-y-3">
+                <label className="flex items-center space-x-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => {
+                        setRememberMe(e.target.checked);
+                        if (!e.target.checked) {
+                          setAutoLogin(false);
+                        }
+                      }}
+                      className="sr-only"
+                    />
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                      rememberMe 
+                        ? 'bg-cyan-500 border-cyan-500' 
+                        : 'bg-white/10 border-white/30 group-hover:border-cyan-400'
+                    }`}>
+                      {rememberMe && <Check className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                  </div>
+                  <span className="text-gray-300 text-sm select-none">记住账号密码</span>
+                </label>
+
+                <label className="flex items-center space-x-3 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={autoLogin}
+                      disabled={!rememberMe}
+                      onChange={(e) => setAutoLogin(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                      autoLogin 
+                        ? 'bg-cyan-500 border-cyan-500' 
+                        : rememberMe 
+                          ? 'bg-white/10 border-white/30 group-hover:border-cyan-400'
+                          : 'bg-white/5 border-white/20 opacity-50'
+                    }`}>
+                      {autoLogin && <Check className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                  </div>
+                  <span className={`text-sm select-none ${
+                    rememberMe ? 'text-gray-300' : 'text-gray-500'
+                  }`}>
+                    自动登录
+                  </span>
+                </label>
+
+                <p className="text-gray-500 text-xs pl-8">
+                  💡 勾选自动登录后，下次打开系统将自动登入
+                </p>
+              </div>
+
               <button
                 type="submit"
                 className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white py-4 rounded-xl font-semibold transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] text-lg"
@@ -1485,6 +1614,38 @@ const EastMountTravelSystem = () => {
                             </div>
                           )}
 
+                          {/* 订单图片 */}
+                          {booking.images && booking.images.length > 0 && (
+                            <div className="mb-3">
+                              <div className="text-gray-400 text-xs mb-2 flex items-center">
+                                <span className="mr-1">📷</span>
+                                订单图片 ({booking.images.length}张)
+                              </div>
+                              <div className="grid grid-cols-4 gap-2">
+                                {booking.images.slice(0, 4).map((url, idx) => (
+                                  <div key={idx} className="relative group">
+                                    <img
+                                      src={url}
+                                      alt={`图片${idx + 1}`}
+                                      onClick={() => setViewingImage(url)}
+                                      className="w-full h-16 object-cover rounded-lg border border-white/20 cursor-pointer hover:border-cyan-400 transition-all"
+                                    />
+                                    {/* 查看提示 */}
+                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg">
+                                      <Eye className="w-4 h-4 text-white" />
+                                    </div>
+                                    {/* 如果超过4张，显示更多提示 */}
+                                    {idx === 3 && booking.images.length > 4 && (
+                                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-lg">
+                                        <span className="text-white text-xs font-bold">+{booking.images.length - 4}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           {/* 价格信息 */}
                           <div className="flex items-center justify-between pt-3 border-t border-white/20">
                             <div className="flex items-center space-x-3 text-xs">
@@ -1630,6 +1791,34 @@ const EastMountTravelSystem = () => {
                                 )}
                                 {!booking.source && !booking.assigned_to && (
                                   <div className="text-gray-500 text-sm">暂无</div>
+                                )}
+                                {/* 订单图片 */}
+                                {booking.images && booking.images.length > 0 && (
+                                  <div className="mt-2">
+                                    <div className="text-gray-400 text-xs mb-1">
+                                      📷 图片 ({booking.images.length})
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {booking.images.slice(0, 3).map((url, idx) => (
+                                        <div key={idx} className="relative group">
+                                          <img
+                                            src={url}
+                                            alt={`图${idx + 1}`}
+                                            onClick={() => setViewingImage(url)}
+                                            className="w-12 h-12 object-cover rounded border border-white/20 cursor-pointer hover:border-cyan-400 transition-all"
+                                          />
+                                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded">
+                                            <Eye className="w-3 h-3 text-white" />
+                                          </div>
+                                        </div>
+                                      ))}
+                                      {booking.images.length > 3 && (
+                                        <div className="w-12 h-12 bg-white/5 rounded border border-white/20 flex items-center justify-center">
+                                          <span className="text-white text-xs">+{booking.images.length - 3}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -2032,6 +2221,7 @@ const EastMountTravelSystem = () => {
           uploadingImage={uploadingImage}
           onImageUpload={handleImageUpload}
           onRemoveImage={handleRemoveImage}
+          setViewingImage={setViewingImage}
         />
       )}
 
@@ -2233,13 +2423,21 @@ const EastMountTravelSystem = () => {
           to { transform: rotate(360deg); }
         }
       `}</style>
+
+      {/* 图片查看器 */}
+      {viewingImage && (
+        <ImageViewer 
+          imageUrl={viewingImage} 
+          onClose={() => setViewingImage(null)} 
+        />
+      )}
     </div>
   );
 };
 
 // 组件定义继续...
 // 订单表单 Modal 组件
-const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose, uploadingImage, onImageUpload, onRemoveImage }) => {
+const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose, uploadingImage, onImageUpload, onRemoveImage, setViewingImage }) => {
   const totalPrice = (parseFloat(formData.deposit) || 0) + (parseFloat(formData.balance) || 0);
   const isCharterService = formData.serviceType === '包车';
 
@@ -2575,7 +2773,8 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                       <img
                         src={url}
                         alt={`订单图片 ${index + 1}`}
-                        className="w-full h-24 sm:h-32 object-cover rounded-lg border border-white/20"
+                        onClick={() => setViewingImage(url)}
+                        className="w-full h-24 sm:h-32 object-cover rounded-lg border border-white/20 cursor-pointer hover:border-cyan-400 transition-all"
                       />
                       <button
                         type="button"
@@ -2584,6 +2783,10 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                       >
                         <X className="w-4 h-4" />
                       </button>
+                      {/* 查看提示 */}
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg pointer-events-none">
+                        <Eye className="w-6 h-6 text-white" />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2623,6 +2826,11 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
 // 设置 Modal 组件
 const SettingsModal = ({ settings, onSave, onClose, uploadingLogo, onLogoUpload }) => {
   const [formData, setFormData] = useState(settings);
+
+  // 当settings变化时更新formData（Logo上传成功后）
+  useEffect(() => {
+    setFormData(settings);
+  }, [settings]);
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -3405,6 +3613,41 @@ const DayBookingsModal = ({ date, bookings, calculateTotalPrice, statusConfig, o
           >
             关闭
           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 图片查看器组件
+const ImageViewer = ({ imageUrl, onClose }) => {
+  if (!imageUrl) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
+        {/* 关闭按钮 */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all z-10"
+        >
+          <X className="w-6 h-6 text-white" />
+        </button>
+
+        {/* 图片 */}
+        <img
+          src={imageUrl}
+          alt="查看图片"
+          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+
+        {/* 提示 */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full">
+          <p className="text-white text-sm">点击空白处关闭</p>
         </div>
       </div>
     </div>
