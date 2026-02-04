@@ -14,6 +14,10 @@ const EastMountTravelSystem = () => {
   const [showRegister, setShowRegister] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: '', password: '', showPassword: false });
   const [registerForm, setRegisterForm] = useState({ username: '', password: '', confirmPassword: '', displayName: '', showPassword: false });
+  
+  // 权限检查：是否可以查看金额信息
+  const canViewFinance = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  
   const [bookings, setBookings] = useState([]);
   const [activeView, setActiveView] = useState('list');
   const [calendarView, setCalendarView] = useState('schedule');
@@ -826,19 +830,36 @@ const EastMountTravelSystem = () => {
   };
 
   const handleExport = () => {
-    const headers = ['服务类型', '起始日期', '结束日期', '起始时间', '结束时间', '上车地点', '下车地点', '乘客人数', '儿童人数', '行李数量', '行李尺寸', '客户姓名', '联系电话', '定金', '尾款', '总价', '状态', '行程', '备注', '售后备注', '创建人', '创建时间'];
+    // 根据权限决定导出的列
+    const headers = canViewFinance 
+      ? ['服务类型', '起始日期', '结束日期', '起始时间', '结束时间', '上车地点', '下车地点', '乘客人数', '儿童人数', '行李数量', '行李尺寸', '客户姓名', '联系电话', '定金', '尾款', '总价', '状态', '行程', '备注', '售后备注', '创建人', '创建时间']
+      : ['服务类型', '起始日期', '结束日期', '起始时间', '结束时间', '上车地点', '下车地点', '乘客人数', '儿童人数', '行李数量', '行李尺寸', '客户姓名', '联系电话', '状态', '行程', '备注', '售后备注', '创建人', '创建时间'];
+    
     const rows = bookings.map(b => {
       const totalPrice = (parseFloat(b.deposit) || 0) + (parseFloat(b.balance) || 0);
       const statusLabel = statusConfig[b.status || '待服务']?.label || '待服务';
-      return [
-        b.service_type, b.date, b.end_date || '', b.time, b.end_time || '', b.pickup, b.dropoff,
-        b.passengers, b.child_count || '', b.luggage, b.luggage_size,
-        b.customer_name, b.customer_phone,
-        b.deposit || '', b.balance || '', totalPrice.toFixed(2),
-        statusLabel,
-        b.itinerary || '', b.notes || '', b.after_sales_notes || '', b.created_by || '', 
-        b.created_at ? new Date(b.created_at).toLocaleString('zh-CN') : ''
-      ];
+      
+      // 根据权限决定导出的数据
+      if (canViewFinance) {
+        return [
+          b.service_type, b.date, b.end_date || '', b.time, b.end_time || '', b.pickup, b.dropoff,
+          b.passengers, b.child_count || '', b.luggage, b.luggage_size,
+          b.customer_name, b.customer_phone,
+          b.deposit || '', b.balance || '', totalPrice.toFixed(2),
+          statusLabel,
+          b.itinerary || '', b.notes || '', b.after_sales_notes || '', b.created_by || '', 
+          b.created_at ? new Date(b.created_at).toLocaleString('zh-CN') : ''
+        ];
+      } else {
+        return [
+          b.service_type, b.date, b.end_date || '', b.time, b.end_time || '', b.pickup, b.dropoff,
+          b.passengers, b.child_count || '', b.luggage, b.luggage_size,
+          b.customer_name, b.customer_phone,
+          statusLabel,
+          b.itinerary || '', b.notes || '', b.after_sales_notes || '', b.created_by || '', 
+          b.created_at ? new Date(b.created_at).toLocaleString('zh-CN') : ''
+        ];
+      }
     });
     
     const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -1490,8 +1511,13 @@ const EastMountTravelSystem = () => {
             </div>
           </div>
           <button
-            onClick={() => setShowFinanceReport(true)}
-            className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 border border-green-400/30 w-full hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 cursor-pointer"
+            onClick={() => canViewFinance && setShowFinanceReport(true)}
+            disabled={!canViewFinance}
+            className={`bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 border border-green-400/30 w-full transition-all transform ${
+              canViewFinance 
+                ? 'hover:from-green-600 hover:to-emerald-700 hover:scale-105 cursor-pointer' 
+                : 'opacity-50 cursor-not-allowed'
+            }`}
           >
             <div className="flex items-center justify-between">
               <div className="text-left">
@@ -1500,7 +1526,11 @@ const EastMountTravelSystem = () => {
                   <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full">点击查看明细</span>
                 </p>
                 <p className="text-4xl font-bold text-white mt-2">
-                  ¥{bookings.reduce((sum, b) => sum + calculateTotalPrice(b), 0).toFixed(2)}
+                  {canViewFinance ? (
+                    `¥${bookings.reduce((sum, b) => sum + calculateTotalPrice(b), 0).toFixed(2)}`
+                  ) : (
+                    <span className="text-2xl text-gray-400">权限不足</span>
+                  )}
                 </p>
               </div>
               <DollarSign className="w-12 h-12 text-green-200" />
@@ -1646,21 +1676,23 @@ const EastMountTravelSystem = () => {
                             </div>
                           )}
 
-                          {/* 价格信息 */}
-                          <div className="flex items-center justify-between pt-3 border-t border-white/20">
-                            <div className="flex items-center space-x-3 text-xs">
-                              <span className="text-gray-300">
-                                定金: <span className="text-white font-semibold">¥{(parseFloat(booking.deposit) || 0).toFixed(2)}</span>
-                              </span>
-                              <span className="text-gray-300">
-                                尾款: <span className="text-white font-semibold">¥{(parseFloat(booking.balance) || 0).toFixed(2)}</span>
-                              </span>
+                          {/* 价格信息 - 仅admin和manager可见 */}
+                          {canViewFinance && (
+                            <div className="flex items-center justify-between pt-3 border-t border-white/20">
+                              <div className="flex items-center space-x-3 text-xs">
+                                <span className="text-gray-300">
+                                  定金: <span className="text-white font-semibold">¥{(parseFloat(booking.deposit) || 0).toFixed(2)}</span>
+                                </span>
+                                <span className="text-gray-300">
+                                  尾款: <span className="text-white font-semibold">¥{(parseFloat(booking.balance) || 0).toFixed(2)}</span>
+                                </span>
+                              </div>
+                              <div className="flex items-center">
+                                <span className="text-green-400 text-sm mr-1">¥</span>
+                                <span className="text-green-400 text-xl font-bold">{totalPrice.toFixed(2)}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center">
-                              <span className="text-green-400 text-sm mr-1">¥</span>
-                              <span className="text-green-400 text-xl font-bold">{totalPrice.toFixed(2)}</span>
-                            </div>
-                          </div>
+                          )}
 
                           {/* 操作按钮 */}
                           {currentUser.role === 'admin' && (
@@ -1823,32 +1855,35 @@ const EastMountTravelSystem = () => {
                               </div>
                             </div>
                             
-                            <div>
-                              <p className="text-gray-400 text-sm mb-2">价格</p>
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-gray-300 text-sm">定金:</span>
-                                  <span className="text-white font-semibold">
-                                    ¥{booking.deposit ? parseFloat(booking.deposit).toFixed(2) : '0.00'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-gray-300 text-sm">尾款:</span>
-                                  <span className="text-white font-semibold">
-                                    ¥{booking.balance ? parseFloat(booking.balance).toFixed(2) : '0.00'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-between pt-2 border-t border-white/20">
-                                  <span className="text-gray-300 text-sm font-medium">总价:</span>
-                                  <div className="flex items-center">
-                                    <DollarSign className="w-5 h-5 text-green-400" />
-                                    <span className="text-3xl font-bold text-green-400">
-                                      {totalPrice.toFixed(2)}
+                            {/* 价格信息 - 仅admin和manager可见 */}
+                            {canViewFinance && (
+                              <div>
+                                <p className="text-gray-400 text-sm mb-2">价格</p>
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-gray-300 text-sm">定金:</span>
+                                    <span className="text-white font-semibold">
+                                      ¥{booking.deposit ? parseFloat(booking.deposit).toFixed(2) : '0.00'}
                                     </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-gray-300 text-sm">尾款:</span>
+                                    <span className="text-white font-semibold">
+                                      ¥{booking.balance ? parseFloat(booking.balance).toFixed(2) : '0.00'}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between pt-2 border-t border-white/20">
+                                    <span className="text-gray-300 text-sm font-medium">总价:</span>
+                                    <div className="flex items-center">
+                                      <DollarSign className="w-5 h-5 text-green-400" />
+                                      <span className="text-3xl font-bold text-green-400">
+                                        {totalPrice.toFixed(2)}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                           
                           {currentUser.role === 'admin' && (
@@ -2137,7 +2172,10 @@ const EastMountTravelSystem = () => {
                                       e.stopPropagation();
                                       handleEdit(booking);
                                     }}
-                                    title={`${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`}
+                                    title={canViewFinance 
+                                      ? `${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`
+                                      : `${booking.time} ${booking.customer_name}`
+                                    }
                                   >
                                     {booking.time} {booking.customer_name}
                                   </div>
@@ -2222,6 +2260,7 @@ const EastMountTravelSystem = () => {
           onImageUpload={handleImageUpload}
           onRemoveImage={handleRemoveImage}
           setViewingImage={setViewingImage}
+          canViewFinance={canViewFinance}
         />
       )}
 
@@ -2251,7 +2290,9 @@ const EastMountTravelSystem = () => {
                 <h3 className="text-white font-semibold mb-2">订单信息：</h3>
                 <p className="text-gray-300">客户：{currentAfterSalesBooking.customer_name}</p>
                 <p className="text-gray-300">日期：{currentAfterSalesBooking.date}</p>
-                <p className="text-gray-300">总价：¥{calculateTotalPrice(currentAfterSalesBooking).toFixed(2)}</p>
+                {canViewFinance && (
+                  <p className="text-gray-300">总价：¥{calculateTotalPrice(currentAfterSalesBooking).toFixed(2)}</p>
+                )}
               </div>
 
               <div>
@@ -2437,7 +2478,7 @@ const EastMountTravelSystem = () => {
 
 // 组件定义继续...
 // 订单表单 Modal 组件
-const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose, uploadingImage, onImageUpload, onRemoveImage, setViewingImage }) => {
+const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose, uploadingImage, onImageUpload, onRemoveImage, setViewingImage, canViewFinance }) => {
   const totalPrice = (parseFloat(formData.deposit) || 0) + (parseFloat(formData.balance) || 0);
   const isCharterService = formData.serviceType === '包车';
 
@@ -2665,31 +2706,36 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                 />
               </div>
               
-              <div>
-                <label className="block text-gray-300 font-medium mb-2">定金 (¥)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.deposit}
-                  onChange={(e) => setFormData({...formData, deposit: e.target.value})}
-                  placeholder="例如: 50.00"
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                />
-              </div>
+              {/* 定金尾款 - 仅admin和manager可见 */}
+              {canViewFinance && (
+                <>
+                  <div>
+                    <label className="block text-gray-300 font-medium mb-2">定金 (¥)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.deposit}
+                      onChange={(e) => setFormData({...formData, deposit: e.target.value})}
+                      placeholder="例如: 50.00"
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-gray-300 font-medium mb-2">尾款 (¥)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.balance}
+                      onChange={(e) => setFormData({...formData, balance: e.target.value})}
+                      placeholder="例如: 100.00"
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                    />
+                  </div>
+                </>
+              )}
               
-              <div>
-                <label className="block text-gray-300 font-medium mb-2">尾款 (¥)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.balance}
-                  onChange={(e) => setFormData({...formData, balance: e.target.value})}
-                  placeholder="例如: 100.00"
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                />
-              </div>
-              
-              {(formData.deposit || formData.balance) && (
+              {canViewFinance && (formData.deposit || formData.balance) && (
                 <div className="md:col-span-2">
                   <div className="bg-green-500/20 border border-green-400/30 rounded-xl p-4">
                     <div className="flex items-center justify-between">
