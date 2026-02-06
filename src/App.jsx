@@ -55,8 +55,7 @@ const EastMountTravelSystem = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [viewingImage, setViewingImage] = useState(null); // 查看大图
-  const [rememberMe, setRememberMe] = useState(false); // 记住密码
-  const [autoLogin, setAutoLogin] = useState(false); // 自动登录
+  const [rememberUsername, setRememberUsername] = useState(false); // 记住用户名（仅用户名，不记住密码）
   
   const [formData, setFormData] = useState({
     serviceType: '接机',
@@ -72,6 +71,7 @@ const EastMountTravelSystem = () => {
     luggageSize: '28寸',
     customerName: '',
     customerPhone: '',
+    flightNumber: '',  // 航班号（可选）
     notes: '',
     itinerary: '',
     deposit: '',
@@ -86,6 +86,8 @@ const EastMountTravelSystem = () => {
   const statusConfig = {
     '待服务': { label: '待服务', color: 'bg-amber-500/20 text-amber-300 border-amber-400/30', icon: AlertCircle },
     '已完成': { label: '已完成', color: 'bg-green-500/20 text-green-300 border-green-400/30', icon: CheckCircle },
+    '未结算': { label: '未结算', color: 'bg-blue-500/20 text-blue-300 border-blue-400/30', icon: DollarSign },
+    '已结算': { label: '已结算', color: 'bg-purple-500/20 text-purple-300 border-purple-400/30', icon: CheckCircle },
     '已取消': { label: '已取消', color: 'bg-red-500/20 text-red-300 border-red-400/30', icon: Ban }
   };
 
@@ -108,59 +110,24 @@ const EastMountTravelSystem = () => {
     }
   };
 
-  // 自动登录
+  // 页面加载时自动填充用户名（不填充密码）
   useEffect(() => {
-    const savedAutoLogin = localStorage.getItem('autoLogin') === 'true';
     const savedUsername = localStorage.getItem('savedUsername');
-    const savedPassword = localStorage.getItem('savedPassword');
     
-    if (savedAutoLogin && savedUsername && savedPassword) {
-      // 自动执行登录
+    if (savedUsername) {
+      // 只填充用户名，密码留空
       setLoginForm({ 
         username: savedUsername, 
-        password: savedPassword, 
+        password: '', 
         showPassword: false 
       });
-      setAutoLogin(true);
-      setRememberMe(true);
-      
-      // 延迟执行登录，确保状态已设置
-      setTimeout(async () => {
-        if (!supabase) return;
-        
-        try {
-          const { data: users, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('username', savedUsername)
-            .eq('password', savedPassword)
-            .eq('status', 'approved');
-
-          if (error) throw error;
-
-          if (users && users.length > 0) {
-            const user = users[0];
-            setCurrentUser(user);
-            setIsLoggedIn(true);
-          }
-        } catch (error) {
-          console.error('自动登录失败:', error);
-          // 如果自动登录失败，清除保存的信息
-          localStorage.removeItem('autoLogin');
-          localStorage.removeItem('savedUsername');
-          localStorage.removeItem('savedPassword');
-        }
-      }, 100);
-    } else if (savedUsername && savedPassword) {
-      // 只记住密码，不自动登录
-      setLoginForm({ 
-        username: savedUsername, 
-        password: savedPassword, 
-        showPassword: false 
-      });
-      setRememberMe(true);
+      setRememberUsername(true);
     }
-  }, [supabase]);
+    
+    // 清除旧版本可能保存的密码和自动登录设置
+    localStorage.removeItem('savedPassword');
+    localStorage.removeItem('autoLogin');
+  }, []);
 
   // 加载数据
   useEffect(() => {
@@ -273,20 +240,16 @@ const EastMountTravelSystem = () => {
         return;
       }
 
-      // 保存登录信息
-      if (rememberMe) {
+      // 保存用户名（不保存密码）
+      if (rememberUsername) {
         localStorage.setItem('savedUsername', loginForm.username);
-        localStorage.setItem('savedPassword', loginForm.password);
       } else {
         localStorage.removeItem('savedUsername');
-        localStorage.removeItem('savedPassword');
       }
-
-      if (autoLogin) {
-        localStorage.setItem('autoLogin', 'true');
-      } else {
-        localStorage.removeItem('autoLogin');
-      }
+      
+      // 确保清除旧版本可能保存的密码
+      localStorage.removeItem('savedPassword');
+      localStorage.removeItem('autoLogin');
 
       setCurrentUser(data);
       setIsLoggedIn(true);
@@ -701,6 +664,7 @@ const EastMountTravelSystem = () => {
         luggage_size: formData.luggageSize,
         customer_name: formData.customerName,
         customer_phone: formData.customerPhone,
+        flight_number: formData.flightNumber || null,  // 航班号（可选）
         notes: formData.notes || null,
         itinerary: formData.serviceType === '包车' ? (formData.itinerary || null) : null,
         deposit: formData.deposit ? parseFloat(formData.deposit) : null,
@@ -761,6 +725,7 @@ const EastMountTravelSystem = () => {
       luggageSize: '28寸',
       customerName: '',
       customerPhone: '',
+      flightNumber: '',
       notes: '',
       itinerary: '',
       deposit: '',
@@ -791,6 +756,7 @@ const EastMountTravelSystem = () => {
       luggageSize: booking.luggage_size,
       customerName: booking.customer_name,
       customerPhone: booking.customer_phone,
+      flightNumber: booking.flight_number || '',
       notes: booking.notes || '',
       itinerary: booking.itinerary || '',
       deposit: booking.deposit || '',
@@ -832,8 +798,8 @@ const EastMountTravelSystem = () => {
   const handleExport = () => {
     // 根据权限决定导出的列
     const headers = canViewFinance 
-      ? ['服务类型', '起始日期', '结束日期', '起始时间', '结束时间', '上车地点', '下车地点', '乘客人数', '儿童人数', '行李数量', '行李尺寸', '客户姓名', '联系电话', '定金', '尾款', '总价', '状态', '行程', '备注', '售后备注', '创建人', '创建时间']
-      : ['服务类型', '起始日期', '结束日期', '起始时间', '结束时间', '上车地点', '下车地点', '乘客人数', '儿童人数', '行李数量', '行李尺寸', '客户姓名', '联系电话', '状态', '行程', '备注', '售后备注', '创建人', '创建时间'];
+      ? ['服务类型', '起始日期', '结束日期', '起始时间', '结束时间', '上车地点', '下车地点', '乘客人数', '儿童人数', '行李数量', '行李尺寸', '客户姓名', '联系电话', '航班号', '定金', '尾款', '总价', '状态', '行程', '备注', '售后备注', '创建人', '创建时间']
+      : ['服务类型', '起始日期', '结束日期', '起始时间', '结束时间', '上车地点', '下车地点', '乘客人数', '儿童人数', '行李数量', '行李尺寸', '客户姓名', '联系电话', '航班号', '状态', '行程', '备注', '售后备注', '创建人', '创建时间'];
     
     const rows = bookings.map(b => {
       const totalPrice = (parseFloat(b.deposit) || 0) + (parseFloat(b.balance) || 0);
@@ -844,7 +810,7 @@ const EastMountTravelSystem = () => {
         return [
           b.service_type, b.date, b.end_date || '', b.time, b.end_time || '', b.pickup, b.dropoff,
           b.passengers, b.child_count || '', b.luggage, b.luggage_size,
-          b.customer_name, b.customer_phone,
+          b.customer_name, b.customer_phone, b.flight_number || '',
           b.deposit || '', b.balance || '', totalPrice.toFixed(2),
           statusLabel,
           b.itinerary || '', b.notes || '', b.after_sales_notes || '', b.created_by || '', 
@@ -854,7 +820,7 @@ const EastMountTravelSystem = () => {
         return [
           b.service_type, b.date, b.end_date || '', b.time, b.end_time || '', b.pickup, b.dropoff,
           b.passengers, b.child_count || '', b.luggage, b.luggage_size,
-          b.customer_name, b.customer_phone,
+          b.customer_name, b.customer_phone, b.flight_number || '',
           statusLabel,
           b.itinerary || '', b.notes || '', b.after_sales_notes || '', b.created_by || '', 
           b.created_at ? new Date(b.created_at).toLocaleString('zh-CN') : ''
@@ -987,61 +953,32 @@ const EastMountTravelSystem = () => {
                 </div>
               </div>
 
-              {/* 记住密码和自动登录 */}
+              {/* 记住用户名 */}
               <div className="space-y-3">
                 <label className="flex items-center space-x-3 cursor-pointer group">
                   <div className="relative">
                     <input
                       type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => {
-                        setRememberMe(e.target.checked);
-                        if (!e.target.checked) {
-                          setAutoLogin(false);
-                        }
-                      }}
+                      checked={rememberUsername}
+                      onChange={(e) => setRememberUsername(e.target.checked)}
                       className="sr-only"
                     />
                     <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                      rememberMe 
+                      rememberUsername 
                         ? 'bg-cyan-500 border-cyan-500' 
                         : 'bg-white/10 border-white/30 group-hover:border-cyan-400'
                     }`}>
-                      {rememberMe && <Check className="w-3.5 h-3.5 text-white" />}
+                      {rememberUsername && <Check className="w-3.5 h-3.5 text-white" />}
                     </div>
                   </div>
-                  <span className="text-gray-300 text-sm select-none">记住账号密码</span>
+                  <span className="text-gray-300 text-sm select-none">记住用户名</span>
                 </label>
 
-                <label className="flex items-center space-x-3 cursor-pointer group">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      checked={autoLogin}
-                      disabled={!rememberMe}
-                      onChange={(e) => setAutoLogin(e.target.checked)}
-                      className="sr-only"
-                    />
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                      autoLogin 
-                        ? 'bg-cyan-500 border-cyan-500' 
-                        : rememberMe 
-                          ? 'bg-white/10 border-white/30 group-hover:border-cyan-400'
-                          : 'bg-white/5 border-white/20 opacity-50'
-                    }`}>
-                      {autoLogin && <Check className="w-3.5 h-3.5 text-white" />}
-                    </div>
-                  </div>
-                  <span className={`text-sm select-none ${
-                    rememberMe ? 'text-gray-300' : 'text-gray-500'
-                  }`}>
-                    自动登录
-                  </span>
-                </label>
-
-                <p className="text-gray-500 text-xs pl-8">
-                  💡 勾选自动登录后，下次打开系统将自动登入
-                </p>
+                <div className="bg-amber-500/10 border border-amber-400/20 rounded-lg p-3">
+                  <p className="text-amber-300 text-xs leading-relaxed">
+                    🔒 <span className="font-semibold">安全提示：</span>只记住用户名，密码需每次手动输入，确保账号安全
+                  </p>
+                </div>
               </div>
 
               <button
@@ -1610,6 +1547,12 @@ const EastMountTravelSystem = () => {
                                 <Briefcase className="w-3 h-3 mr-1 text-purple-400" />
                                 {booking.luggage}件 ({booking.luggage_size})
                               </span>
+                              {booking.flight_number && (
+                                <span className="flex items-center">
+                                  <span className="mr-1">✈️</span>
+                                  {booking.flight_number}
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -1794,6 +1737,12 @@ const EastMountTravelSystem = () => {
                                   <Phone className="w-4 h-4 mr-2" />
                                   <span className="font-mono">{booking.customer_phone}</span>
                                 </div>
+                                {booking.flight_number && (
+                                  <div className="flex items-center text-blue-300">
+                                    <span className="mr-2">✈️</span>
+                                    <span className="font-mono">{booking.flight_number}</span>
+                                  </div>
+                                )}
                                 {booking.notes && (
                                   <div className="mt-2 text-amber-300 text-sm bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-400/20">
                                     备注: {booking.notes}
@@ -1931,15 +1880,36 @@ const EastMountTravelSystem = () => {
                               
                               <button
                                 onClick={() => handleUpdateStatus(booking.id, '已完成')}
-                                disabled={booking.status === '已完成'}
+                                disabled={booking.status === '已完成' || booking.status === '未结算' || booking.status === '已结算'}
                                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                                  booking.status === '已完成'
+                                  booking.status === '已完成' || booking.status === '未结算' || booking.status === '已结算'
                                     ? 'bg-green-500/30 text-green-200 cursor-not-allowed'
                                     : 'bg-green-500/10 text-green-300 hover:bg-green-500/20 border border-green-400/30'
                                 }`}
                               >
                                 已完成
                               </button>
+                              
+                              {/* 未结算按钮 - 只在已完成时显示 */}
+                              {(booking.status === '已完成' || booking.status === '未结算') && (
+                                <button
+                                  onClick={() => handleUpdateStatus(booking.id, booking.status === '未结算' ? '已结算' : '未结算')}
+                                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                                    booking.status === '未结算'
+                                      ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-400/30'
+                                      : 'bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 border border-blue-400/30'
+                                  }`}
+                                >
+                                  {booking.status === '未结算' ? '→ 已结算' : '未结算'}
+                                </button>
+                              )}
+                              
+                              {/* 已结算状态显示 */}
+                              {booking.status === '已结算' && (
+                                <span className="px-3 py-1 rounded-lg text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-400/30">
+                                  ✓ 已结算
+                                </span>
+                              )}
                               
                               <button
                                 onClick={() => handleUpdateStatus(booking.id, '已取消')}
@@ -2685,6 +2655,17 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
               </div>
               
               <div>
+                <label className="block text-gray-300 font-medium mb-2">航班号（可选）</label>
+                <input
+                  type="text"
+                  value={formData.flightNumber}
+                  onChange={(e) => setFormData({...formData, flightNumber: e.target.value})}
+                  placeholder="例如: CZ3140、MU5122等"
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                />
+              </div>
+              
+              <div>
                 <label className="block text-gray-300 font-medium mb-2">订单来源</label>
                 <input
                   type="text"
@@ -3148,12 +3129,14 @@ const FinanceReportModal = ({ bookings, calculateTotalPrice, statusConfig, onClo
 
   // 导出财务报表
   const handleExportFinance = () => {
-    const headers = ['日期', '客户姓名', '服务类型', '状态', '定金', '尾款', '总价', '售后备注'];
+    const headers = ['日期', '客户姓名', '联系电话', '航班号', '服务类型', '状态', '定金', '尾款', '总价', '售后备注'];
     const rows = bookings.map(b => {
       const totalPrice = calculateTotalPrice(b);
       return [
         b.date,
         b.customer_name,
+        b.customer_phone,
+        b.flight_number || '',
         b.service_type,
         statusConfig[b.status || '待服务']?.label || '待服务',
         (parseFloat(b.deposit) || 0).toFixed(2),
