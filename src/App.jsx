@@ -77,35 +77,44 @@ const EastMountTravelSystem = () => {
     deposit: '',
     balance: '',
     status: '待服务',
+    paymentStatus: '未结算',  // 结算状态（独立于服务状态）
     source: '',
     assignedTo: '',
     images: []  // 订单图片数组
   });
 
-  // 订单状态配置
+  // 订单状态配置（服务状态）
   const statusConfig = {
     '待服务': { label: '待服务', color: 'bg-amber-500/20 text-amber-300 border-amber-400/30', icon: AlertCircle },
     '已完成': { label: '已完成', color: 'bg-green-500/20 text-green-300 border-green-400/30', icon: CheckCircle },
-    '未结算': { label: '未结算', color: 'bg-blue-500/20 text-blue-300 border-blue-400/30', icon: DollarSign },
-    '已结算': { label: '已结算', color: 'bg-purple-500/20 text-purple-300 border-purple-400/30', icon: CheckCircle },
     '已取消': { label: '已取消', color: 'bg-red-500/20 text-red-300 border-red-400/30', icon: Ban }
   };
 
-  // 根据订单状态获取背景色
-  const getBookingBgColor = (status) => {
-    switch(status) {
-      case '待服务':
-        return 'bg-red-500/10 border-red-400/20'; // 淡红透明 - 未完成
-      case '已完成':
-      case '未结算':
-        return 'bg-yellow-500/10 border-yellow-400/20'; // 淡黄透明 - 已完成但未结算
-      case '已结算':
-        return 'bg-green-500/10 border-green-400/20'; // 淡绿透明 - 已结算
-      case '已取消':
-        return 'bg-gray-500/10 border-gray-400/20'; // 灰色透明 - 已取消
-      default:
-        return 'bg-white/5 border-white/10'; // 默认
+  // 结算状态配置
+  const paymentStatusConfig = {
+    '未结算': { label: '未结算', color: 'bg-blue-500/20 text-blue-300 border-blue-400/30', icon: DollarSign },
+    '已结算': { label: '已结算', color: 'bg-purple-500/20 text-purple-300 border-purple-400/30', icon: CheckCircle }
+  };
+
+  // 根据订单状态和结算状态获取背景色
+  const getBookingBgColor = (status, paymentStatus) => {
+    // 已取消订单 - 灰色（不考虑结算状态）
+    if (status === '已取消') {
+      return 'bg-gray-500/10 border-gray-400/20';
     }
+    
+    // 已完成 + 已结算 - 绿色（完全完成）
+    if (status === '已完成' && paymentStatus === '已结算') {
+      return 'bg-green-500/10 border-green-400/20';
+    }
+    
+    // 待服务 + 未结算 - 红色（需要处理，未收款）
+    if (status === '待服务' && paymentStatus === '未结算') {
+      return 'bg-red-500/10 border-red-400/20';
+    }
+    
+    // 其他情况（待服务+已结算 或 已完成+未结算）- 黄色
+    return 'bg-yellow-500/10 border-yellow-400/20';
   };
 
   // 加载系统设置
@@ -525,6 +534,29 @@ const EastMountTravelSystem = () => {
     }
   };
 
+  // 更新结算状态
+  const handleUpdatePaymentStatus = async (bookingId, newPaymentStatus) => {
+    if (!supabase || currentUser.role !== 'admin') return;
+
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          payment_status: newPaymentStatus,
+          updated_by: currentUser.display_name,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', bookingId);
+
+      if (error) throw error;
+      await loadBookings();
+      alert('结算状态更新成功！');
+    } catch (error) {
+      console.error('更新结算状态失败:', error);
+      alert('更新结算状态失败: ' + error.message);
+    }
+  };
+
   const handleAfterSales = async () => {
     if (!supabase || !currentAfterSalesBooking) return;
 
@@ -687,6 +719,7 @@ const EastMountTravelSystem = () => {
         deposit: formData.deposit ? parseFloat(formData.deposit) : null,
         balance: formData.balance ? parseFloat(formData.balance) : null,
         status: formData.status || '待服务',
+        payment_status: formData.paymentStatus || '未结算',  // 结算状态
         source: formData.source || null,
         assigned_to: formData.assignedTo || null,
         images: formData.images || []  // 图片数组
@@ -748,6 +781,7 @@ const EastMountTravelSystem = () => {
       deposit: '',
       balance: '',
       status: '待服务',
+      paymentStatus: '未结算',
       source: '',
       assignedTo: '',
       images: []
@@ -779,6 +813,7 @@ const EastMountTravelSystem = () => {
       deposit: booking.deposit || '',
       balance: booking.balance || '',
       status: booking.status || '待服务',
+      paymentStatus: booking.payment_status || '未结算',
       source: booking.source || '',
       assignedTo: booking.assigned_to || '',
       images: booking.images || []
@@ -1513,7 +1548,7 @@ const EastMountTravelSystem = () => {
                   filteredBookings.map((booking) => {
                     const totalPrice = calculateTotalPrice(booking);
                     const StatusIcon = statusConfig[booking.status || '待服务'].icon;
-                    const bgColor = getBookingBgColor(booking.status || '待服务');
+                    const bgColor = getBookingBgColor(booking.status || '待服务', booking.payment_status || '未结算');
                     return (
                       <div key={booking.id} className={`${bgColor} backdrop-blur-md rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 transition-all border`}>
                         
@@ -1875,71 +1910,77 @@ const EastMountTravelSystem = () => {
 
                         {/* 状态管理区域 - 移动端和桌面端共用 */}
                         <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between border-t border-white/10 pt-4 space-y-3 sm:space-y-0">
-                          <div className="flex items-center space-x-2">
-                            <StatusIcon className="w-5 h-5" />
-                            <span className={`px-3 py-1 rounded-lg font-medium ${statusConfig[booking.status || '待服务'].color}`}>
-                              {statusConfig[booking.status || '待服务'].label}
-                            </span>
+                          <div className="flex items-center space-x-2 flex-wrap gap-2">
+                            {/* 服务状态 */}
+                            <div className="flex items-center space-x-2">
+                              <StatusIcon className="w-5 h-5" />
+                              <span className={`px-3 py-1 rounded-lg font-medium ${statusConfig[booking.status || '待服务'].color}`}>
+                                {statusConfig[booking.status || '待服务'].label}
+                              </span>
+                            </div>
+                            {/* 结算状态 */}
+                            <div className="flex items-center space-x-2">
+                              <DollarSign className="w-4 h-4 text-blue-400" />
+                              <span className={`px-3 py-1 rounded-lg font-medium text-xs ${paymentStatusConfig[booking.payment_status || '未结算'].color}`}>
+                                {paymentStatusConfig[booking.payment_status || '未结算'].label}
+                              </span>
+                            </div>
                           </div>
 
                           {currentUser.role === 'admin' && (
-                            <div className="flex items-center space-x-2 flex-wrap">
-                              <button
-                                onClick={() => handleUpdateStatus(booking.id, '待服务')}
-                                disabled={booking.status === '待服务'}
-                                className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                                  booking.status === '待服务'
-                                    ? 'bg-amber-500/30 text-amber-200 cursor-not-allowed'
-                                    : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-400/30'
-                                }`}
-                              >
-                                待服务
-                              </button>
-                              
-                              <button
-                                onClick={() => handleUpdateStatus(booking.id, '已完成')}
-                                disabled={booking.status === '已完成' || booking.status === '未结算' || booking.status === '已结算'}
-                                className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                                  booking.status === '已完成' || booking.status === '未结算' || booking.status === '已结算'
-                                    ? 'bg-green-500/30 text-green-200 cursor-not-allowed'
-                                    : 'bg-green-500/10 text-green-300 hover:bg-green-500/20 border border-green-400/30'
-                                }`}
-                              >
-                                已完成
-                              </button>
-                              
-                              {/* 未结算按钮 - 只在已完成时显示 */}
-                              {(booking.status === '已完成' || booking.status === '未结算') && (
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              {/* 服务状态按钮 */}
+                              <div className="flex items-center space-x-2 flex-wrap gap-2">
                                 <button
-                                  onClick={() => handleUpdateStatus(booking.id, booking.status === '未结算' ? '已结算' : '未结算')}
+                                  onClick={() => handleUpdateStatus(booking.id, '待服务')}
+                                  disabled={booking.status === '待服务'}
                                   className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                                    booking.status === '未结算'
-                                      ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-400/30'
-                                      : 'bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 border border-blue-400/30'
+                                    booking.status === '待服务'
+                                      ? 'bg-amber-500/30 text-amber-200 cursor-not-allowed'
+                                      : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-400/30'
                                   }`}
                                 >
-                                  {booking.status === '未结算' ? '→ 已结算' : '未结算'}
+                                  待服务
                                 </button>
-                              )}
+                                
+                                <button
+                                  onClick={() => handleUpdateStatus(booking.id, '已完成')}
+                                  disabled={booking.status === '已完成'}
+                                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                                    booking.status === '已完成'
+                                      ? 'bg-green-500/30 text-green-200 cursor-not-allowed'
+                                      : 'bg-green-500/10 text-green-300 hover:bg-green-500/20 border border-green-400/30'
+                                  }`}
+                                >
+                                  已完成
+                                </button>
+                                
+                                <button
+                                  onClick={() => handleUpdateStatus(booking.id, '已取消')}
+                                  disabled={booking.status === '已取消'}
+                                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                                    booking.status === '已取消'
+                                      ? 'bg-red-500/30 text-red-200 cursor-not-allowed'
+                                      : 'bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-400/30'
+                                  }`}
+                                >
+                                  已取消
+                                </button>
+                              </div>
                               
-                              {/* 已结算状态显示 */}
-                              {booking.status === '已结算' && (
-                                <span className="px-3 py-1 rounded-lg text-sm font-medium bg-purple-500/20 text-purple-300 border border-purple-400/30">
-                                  ✓ 已结算
-                                </span>
-                              )}
-                              
-                              <button
-                                onClick={() => handleUpdateStatus(booking.id, '已取消')}
-                                disabled={booking.status === '已取消'}
-                                className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                                  booking.status === '已取消'
-                                    ? 'bg-red-500/30 text-red-200 cursor-not-allowed'
-                                    : 'bg-red-500/10 text-red-300 hover:bg-red-500/20 border border-red-400/30'
-                                }`}
-                              >
-                                已取消
-                              </button>
+                              {/* 结算状态按钮 - 始终显示（独立于服务状态）*/}
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleUpdatePaymentStatus(booking.id, booking.payment_status === '未结算' ? '已结算' : '未结算')}
+                                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+                                    booking.payment_status === '已结算'
+                                      ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-400/30'
+                                      : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-400/30'
+                                  }`}
+                                >
+                                  {booking.payment_status === '已结算' ? '✓ 已结算' : '标记已结算'}
+                                </button>
+                              </div>
                               
                               {booking.status === '已取消' && (
                                 <button
@@ -2006,7 +2047,7 @@ const EastMountTravelSystem = () => {
                           {groupedByDate[date].map(booking => {
                             const totalPrice = calculateTotalPrice(booking);
                             const StatusIcon = statusConfig[booking.status || '待服务'].icon;
-                            const bgColor = getBookingBgColor(booking.status || '待服务');
+                            const bgColor = getBookingBgColor(booking.status || '待服务', booking.payment_status || '未结算');
                             return (
                               <div key={booking.id} className={`${bgColor} rounded-xl p-5 border-l-4 border-cyan-400 transition-all`}>
                                 <div className="flex items-center justify-between">
@@ -2154,21 +2195,23 @@ const EastMountTravelSystem = () => {
                             {dayBookings.length > 0 && (
                               <div className="space-y-1 max-h-[200px] overflow-y-auto">
                                 {dayBookings.map(booking => {
-                                  // 根据订单状态获取背景色
+                                  // 根据订单状态和结算状态获取背景色
+                                  const paymentStatus = booking.payment_status || '未结算';
                                   const calendarBgColor = (() => {
-                                    switch(booking.status) {
-                                      case '待服务':
-                                        return 'bg-red-500/30 text-red-200 hover:bg-red-500/50'; // 淡红色 - 未完成
-                                      case '已完成':
-                                      case '未结算':
-                                        return 'bg-yellow-500/30 text-yellow-200 hover:bg-yellow-500/50'; // 淡黄色 - 已完成但未结算
-                                      case '已结算':
-                                        return 'bg-green-500/30 text-green-200 hover:bg-green-500/50'; // 淡绿色 - 已结算
-                                      case '已取消':
-                                        return 'bg-gray-500/30 text-gray-200 hover:bg-gray-500/50'; // 灰色 - 已取消
-                                      default:
-                                        return 'bg-blue-500/30 text-blue-200 hover:bg-blue-500/50'; // 默认蓝色
+                                    // 已取消 - 灰色（不考虑结算状态）
+                                    if (booking.status === '已取消') {
+                                      return 'bg-gray-500/30 text-gray-200 hover:bg-gray-500/50';
                                     }
+                                    // 已完成 + 已结算 - 绿色
+                                    if (booking.status === '已完成' && paymentStatus === '已结算') {
+                                      return 'bg-green-500/30 text-green-200 hover:bg-green-500/50';
+                                    }
+                                    // 待服务 + 未结算 - 红色
+                                    if (booking.status === '待服务' && paymentStatus === '未结算') {
+                                      return 'bg-red-500/30 text-red-200 hover:bg-red-500/50';
+                                    }
+                                    // 其他情况（待服务+已结算 或 已完成+未结算）- 黄色
+                                    return 'bg-yellow-500/30 text-yellow-200 hover:bg-yellow-500/50';
                                   })();
                                   
                                   return (
