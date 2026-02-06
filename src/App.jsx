@@ -91,6 +91,23 @@ const EastMountTravelSystem = () => {
     '已取消': { label: '已取消', color: 'bg-red-500/20 text-red-300 border-red-400/30', icon: Ban }
   };
 
+  // 根据订单状态获取背景色
+  const getBookingBgColor = (status) => {
+    switch(status) {
+      case '待服务':
+        return 'bg-red-500/10 border-red-400/20'; // 淡红透明 - 未完成
+      case '已完成':
+      case '未结算':
+        return 'bg-yellow-500/10 border-yellow-400/20'; // 淡黄透明 - 已完成但未结算
+      case '已结算':
+        return 'bg-green-500/10 border-green-400/20'; // 淡绿透明 - 已结算
+      case '已取消':
+        return 'bg-gray-500/10 border-gray-400/20'; // 灰色透明 - 已取消
+      default:
+        return 'bg-white/5 border-white/10'; // 默认
+    }
+  };
+
   // 加载系统设置
   const loadSystemSettings = async () => {
     if (!supabase) return;
@@ -1496,8 +1513,9 @@ const EastMountTravelSystem = () => {
                   filteredBookings.map((booking) => {
                     const totalPrice = calculateTotalPrice(booking);
                     const StatusIcon = statusConfig[booking.status || '待服务'].icon;
+                    const bgColor = getBookingBgColor(booking.status || '待服务');
                     return (
-                      <div key={booking.id} className="bg-white/10 backdrop-blur-md rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 hover:bg-white/15 transition-all border border-white/20">
+                      <div key={booking.id} className={`${bgColor} backdrop-blur-md rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-6 transition-all border`}>
                         
                         {/* 移动端卡片布局 */}
                         <div className="block lg:hidden">
@@ -1988,8 +2006,9 @@ const EastMountTravelSystem = () => {
                           {groupedByDate[date].map(booking => {
                             const totalPrice = calculateTotalPrice(booking);
                             const StatusIcon = statusConfig[booking.status || '待服务'].icon;
+                            const bgColor = getBookingBgColor(booking.status || '待服务');
                             return (
-                              <div key={booking.id} className="bg-white/5 rounded-xl p-5 border-l-4 border-cyan-400 hover:bg-white/10 transition-all">
+                              <div key={booking.id} className={`${bgColor} rounded-xl p-5 border-l-4 border-cyan-400 transition-all`}>
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center space-x-6 flex-1">
                                     <div className="text-center">
@@ -2134,22 +2153,41 @@ const EastMountTravelSystem = () => {
                             {/* 正常订单 - 显示全部 */}
                             {dayBookings.length > 0 && (
                               <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                                {dayBookings.map(booking => (
-                                  <div
-                                    key={booking.id}
-                                    className="text-xs bg-blue-500/30 text-blue-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-blue-500/50 transition-all"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEdit(booking);
-                                    }}
-                                    title={canViewFinance 
-                                      ? `${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`
-                                      : `${booking.time} ${booking.customer_name}`
+                                {dayBookings.map(booking => {
+                                  // 根据订单状态获取背景色
+                                  const calendarBgColor = (() => {
+                                    switch(booking.status) {
+                                      case '待服务':
+                                        return 'bg-red-500/30 text-red-200 hover:bg-red-500/50'; // 淡红色 - 未完成
+                                      case '已完成':
+                                      case '未结算':
+                                        return 'bg-yellow-500/30 text-yellow-200 hover:bg-yellow-500/50'; // 淡黄色 - 已完成但未结算
+                                      case '已结算':
+                                        return 'bg-green-500/30 text-green-200 hover:bg-green-500/50'; // 淡绿色 - 已结算
+                                      case '已取消':
+                                        return 'bg-gray-500/30 text-gray-200 hover:bg-gray-500/50'; // 灰色 - 已取消
+                                      default:
+                                        return 'bg-blue-500/30 text-blue-200 hover:bg-blue-500/50'; // 默认蓝色
                                     }
-                                  >
-                                    {booking.time} {booking.customer_name}
-                                  </div>
-                                ))}
+                                  })();
+                                  
+                                  return (
+                                    <div
+                                      key={booking.id}
+                                      className={`text-xs ${calendarBgColor} px-2 py-1 rounded truncate cursor-pointer transition-all`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEdit(booking);
+                                      }}
+                                      title={canViewFinance 
+                                        ? `${booking.time} ${booking.customer_name} - ¥${calculateTotalPrice(booking).toFixed(2)}`
+                                        : `${booking.time} ${booking.customer_name}`
+                                      }
+                                    >
+                                      {booking.time} {booking.customer_name}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                             {/* 已取消订单 - 显示全部 */}
@@ -2158,7 +2196,7 @@ const EastMountTravelSystem = () => {
                                 {cancelledBookings.map(booking => (
                                   <div
                                     key={booking.id}
-                                    className="text-xs bg-red-500/30 text-red-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-red-500/50 transition-all"
+                                    className="text-xs bg-gray-500/30 text-gray-200 px-2 py-1 rounded truncate cursor-pointer hover:bg-gray-500/50 transition-all"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleEdit(booking);
