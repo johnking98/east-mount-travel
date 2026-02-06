@@ -1971,14 +1971,18 @@ const EastMountTravelSystem = () => {
                               {/* 结算状态按钮 - 始终显示（独立于服务状态）*/}
                               <div className="flex items-center space-x-2">
                                 <button
-                                  onClick={() => handleUpdatePaymentStatus(booking.id, booking.payment_status === '未结算' ? '已结算' : '未结算')}
+                                  onClick={() => {
+                                    const currentPaymentStatus = booking.payment_status || '未结算';
+                                    const newPaymentStatus = currentPaymentStatus === '未结算' ? '已结算' : '未结算';
+                                    handleUpdatePaymentStatus(booking.id, newPaymentStatus);
+                                  }}
                                   className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                                    booking.payment_status === '已结算'
+                                    (booking.payment_status || '未结算') === '已结算'
                                       ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-400/30'
                                       : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-400/30'
                                   }`}
                                 >
-                                  {booking.payment_status === '已结算' ? '✓ 已结算' : '标记已结算'}
+                                  {(booking.payment_status || '未结算') === '已结算' ? '✓ 已结算' : '标记已结算'}
                                 </button>
                               </div>
                               
