@@ -1645,7 +1645,7 @@ const EastMountTravelSystem = () => {
                             <div className="mb-3">
                               <div className="text-gray-400 text-xs mb-2 flex items-center">
                                 <span className="mr-1">📷</span>
-                                订单图片 ({booking.images.length}张)
+                                订单图片 ({booking.images.length}张) - 点击查看
                               </div>
                               <div className="grid grid-cols-4 gap-2">
                                 {booking.images.slice(0, 4).map((url, idx) => (
@@ -1653,16 +1653,22 @@ const EastMountTravelSystem = () => {
                                     <img
                                       src={url}
                                       alt={`图片${idx + 1}`}
-                                      onClick={() => setViewingImage(url)}
-                                      className="w-full h-16 object-cover rounded-lg border border-white/20 cursor-pointer hover:border-cyan-400 transition-all"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setViewingImage(url);
+                                      }}
+                                      className="w-full h-16 object-cover rounded-lg border border-white/20 cursor-pointer hover:border-cyan-400 hover:scale-105 transition-all shadow-lg"
                                     />
                                     {/* 查看提示 */}
-                                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg">
-                                      <Eye className="w-4 h-4 text-white" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg">
+                                      <div className="text-center">
+                                        <Eye className="w-5 h-5 text-white mx-auto mb-1" />
+                                        <span className="text-white text-xs">查看</span>
+                                      </div>
                                     </div>
                                     {/* 如果超过4张，显示更多提示 */}
                                     {idx === 3 && booking.images.length > 4 && (
-                                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-lg">
+                                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-lg cursor-pointer hover:bg-black/80 transition-all">
                                         <span className="text-white text-xs font-bold">+{booking.images.length - 4}</span>
                                       </div>
                                     )}
@@ -1829,8 +1835,8 @@ const EastMountTravelSystem = () => {
                                 {/* 订单图片 */}
                                 {booking.images && booking.images.length > 0 && (
                                   <div className="mt-2">
-                                    <div className="text-gray-400 text-xs mb-1">
-                                      📷 图片 ({booking.images.length})
+                                    <div className="text-gray-400 text-xs mb-1 flex items-center">
+                                      📷 图片 ({booking.images.length}) - 点击放大
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                       {booking.images.slice(0, 3).map((url, idx) => (
@@ -1838,17 +1844,20 @@ const EastMountTravelSystem = () => {
                                           <img
                                             src={url}
                                             alt={`图${idx + 1}`}
-                                            onClick={() => setViewingImage(url)}
-                                            className="w-12 h-12 object-cover rounded border border-white/20 cursor-pointer hover:border-cyan-400 transition-all"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setViewingImage(url);
+                                            }}
+                                            className="w-12 h-12 object-cover rounded border border-white/20 cursor-pointer hover:border-cyan-400 hover:scale-110 transition-all shadow-md"
                                           />
-                                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded">
-                                            <Eye className="w-3 h-3 text-white" />
+                                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded">
+                                            <Eye className="w-4 h-4 text-white" />
                                           </div>
                                         </div>
                                       ))}
                                       {booking.images.length > 3 && (
-                                        <div className="w-12 h-12 bg-white/5 rounded border border-white/20 flex items-center justify-center">
-                                          <span className="text-white text-xs">+{booking.images.length - 3}</span>
+                                        <div className="w-12 h-12 bg-white/5 rounded border border-white/20 flex items-center justify-center hover:bg-white/10 transition-all cursor-pointer">
+                                          <span className="text-white text-xs font-bold">+{booking.images.length - 3}</span>
                                         </div>
                                       )}
                                     </div>
@@ -3735,18 +3744,162 @@ const DayBookingsModal = ({ date, bookings, calculateTotalPrice, statusConfig, o
 
 // 图片查看器组件
 const ImageViewer = ({ imageUrl, onClose }) => {
+  const [scale, setScale] = React.useState(1);
+  const [position, setPosition] = React.useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
+
   if (!imageUrl) return null;
+
+  // 键盘快捷键
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      switch(e.key) {
+        case 'Escape':
+          onClose();
+          break;
+        case '+':
+        case '=':
+          handleZoomIn();
+          break;
+        case '-':
+        case '_':
+          handleZoomOut();
+          break;
+        case '0':
+          handleReset();
+          break;
+        case 'f':
+        case 'F':
+          handleFit();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [scale]);
+
+  // 缩放控制
+  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 5));
+  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.25));
+  const handleReset = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+  const handleFit = () => {
+    setScale(0.9);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  // 鼠标滚轮缩放
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setScale(prev => Math.max(0.25, Math.min(5, prev + delta)));
+  };
+
+  // 拖拽功能
+  const handleMouseDown = (e) => {
+    if (scale > 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDragging && scale > 1) {
+      setPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // 触摸设备支持
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1 && scale > 1) {
+      setIsDragging(true);
+      setDragStart({ 
+        x: e.touches[0].clientX - position.x, 
+        y: e.touches[0].clientY - position.y 
+      });
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (isDragging && e.touches.length === 1 && scale > 1) {
+      setPosition({
+        x: e.touches[0].clientX - dragStart.x,
+        y: e.touches[0].clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
 
   return (
     <div 
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn"
       onClick={onClose}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       <div className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
+        {/* 顶部工具栏 */}
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white/10 hover:bg-white/15 backdrop-blur-md px-4 py-2 rounded-full transition-all z-10 flex items-center space-x-2 shadow-xl">
+          <button
+            onClick={(e) => { e.stopPropagation(); handleZoomOut(); }}
+            className="p-2 hover:bg-white/20 rounded-full transition-all active:scale-95"
+            title="缩小 (- 键 / 滚轮向下)"
+          >
+            <span className="text-white text-xl font-bold">−</span>
+          </button>
+          
+          <span className="text-white text-sm font-medium min-w-[60px] text-center select-none">
+            {Math.round(scale * 100)}%
+          </span>
+          
+          <button
+            onClick={(e) => { e.stopPropagation(); handleZoomIn(); }}
+            className="p-2 hover:bg-white/20 rounded-full transition-all active:scale-95"
+            title="放大 (+ 键 / 滚轮向上)"
+          >
+            <span className="text-white text-xl font-bold">+</span>
+          </button>
+          
+          <div className="w-px h-6 bg-white/30 mx-2"></div>
+          
+          <button
+            onClick={(e) => { e.stopPropagation(); handleFit(); }}
+            className="px-3 py-1 hover:bg-white/20 rounded-full transition-all text-white text-sm active:scale-95"
+            title="适应屏幕 (F 键)"
+          >
+            适应
+          </button>
+          
+          <button
+            onClick={(e) => { e.stopPropagation(); handleReset(); }}
+            className="px-3 py-1 hover:bg-white/20 rounded-full transition-all text-white text-sm active:scale-95"
+            title="重置 (0 键)"
+          >
+            重置
+          </button>
+        </div>
+
         {/* 关闭按钮 */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 backdrop-blur-sm p-3 rounded-full transition-all z-10"
+          className="absolute top-4 right-4 bg-red-500/80 hover:bg-red-500 backdrop-blur-sm p-3 rounded-full transition-all z-10 shadow-xl active:scale-95"
+          title="关闭 (Esc 键)"
         >
           <X className="w-6 h-6 text-white" />
         </button>
@@ -3755,14 +3908,33 @@ const ImageViewer = ({ imageUrl, onClose }) => {
         <img
           src={imageUrl}
           alt="查看图片"
-          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-transform select-none"
+          style={{
+            transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
+            cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+          }}
           onClick={(e) => e.stopPropagation()}
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onTouchStart={handleTouchStart}
+          draggable={false}
         />
 
-        {/* 提示 */}
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 backdrop-blur-sm px-4 py-2 rounded-full">
-          <p className="text-white text-sm">点击空白处关闭</p>
+        {/* 底部提示 */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-md px-6 py-3 rounded-full shadow-xl">
+          <p className="text-white text-xs sm:text-sm text-center">
+            {scale > 1 ? '🖱️ 拖拽移动 · ' : ''}🖱️ 滚轮缩放 · ⌨️ +/- 缩放 · 🖱️ 点击关闭 · ⌨️ Esc 关闭
+          </p>
         </div>
+
+        {/* 缩放等级指示器 */}
+        {scale !== 1 && (
+          <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-cyan-500/80 backdrop-blur-md px-4 py-2 rounded-full shadow-xl">
+            <p className="text-white text-sm font-bold">
+              {scale > 1 ? `🔍 放大 ${Math.round(scale * 100)}%` : `🔍 缩小 ${Math.round(scale * 100)}%`}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
