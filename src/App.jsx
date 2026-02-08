@@ -117,6 +117,13 @@ const EastMountTravelSystem = () => {
     return 'bg-yellow-500/10 border-yellow-400/20';
   };
 
+  // 根据结算状态获取价格颜色
+  const getPriceColor = (paymentStatus) => {
+    return (paymentStatus || '未结算') === '已结算' 
+      ? 'text-green-400'  // 已结算 - 绿色
+      : 'text-red-400';   // 未结算 - 红色
+  };
+
   // 加载系统设置
   const loadSystemSettings = async () => {
     if (!supabase) return;
@@ -1645,34 +1652,37 @@ const EastMountTravelSystem = () => {
                             <div className="mb-3">
                               <div className="text-gray-400 text-xs mb-2 flex items-center">
                                 <span className="mr-1">📷</span>
-                                订单图片 ({booking.images.length}张) - 点击查看
+                                订单图片 ({booking.images.length}张) - 👆 点击查看大图
                               </div>
                               <div className="grid grid-cols-4 gap-2">
                                 {booking.images.slice(0, 4).map((url, idx) => (
-                                  <div key={idx} className="relative group">
+                                  <button
+                                    key={idx}
+                                    onClick={() => {
+                                      console.log('图片点击:', url);
+                                      setViewingImage(url);
+                                    }}
+                                    className="relative group focus:outline-none focus:ring-2 focus:ring-cyan-400 rounded-lg"
+                                  >
                                     <img
                                       src={url}
                                       alt={`图片${idx + 1}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setViewingImage(url);
-                                      }}
                                       className="w-full h-16 object-cover rounded-lg border border-white/20 cursor-pointer hover:border-cyan-400 hover:scale-105 transition-all shadow-lg"
                                     />
                                     {/* 查看提示 */}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg">
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded-lg pointer-events-none">
                                       <div className="text-center">
                                         <Eye className="w-5 h-5 text-white mx-auto mb-1" />
-                                        <span className="text-white text-xs">查看</span>
+                                        <span className="text-white text-xs font-bold">查看</span>
                                       </div>
                                     </div>
                                     {/* 如果超过4张，显示更多提示 */}
                                     {idx === 3 && booking.images.length > 4 && (
-                                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-lg cursor-pointer hover:bg-black/80 transition-all">
+                                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-lg pointer-events-none">
                                         <span className="text-white text-xs font-bold">+{booking.images.length - 4}</span>
                                       </div>
                                     )}
-                                  </div>
+                                  </button>
                                 ))}
                               </div>
                             </div>
@@ -1690,8 +1700,8 @@ const EastMountTravelSystem = () => {
                                 </span>
                               </div>
                               <div className="flex items-center">
-                                <span className="text-green-400 text-sm mr-1">¥</span>
-                                <span className="text-green-400 text-xl font-bold">{totalPrice.toFixed(2)}</span>
+                                <span className={`${getPriceColor(booking.payment_status)} text-sm mr-1`}>¥</span>
+                                <span className={`${getPriceColor(booking.payment_status)} text-xl font-bold`}>{totalPrice.toFixed(2)}</span>
                               </div>
                             </div>
                           )}
@@ -1836,27 +1846,30 @@ const EastMountTravelSystem = () => {
                                 {booking.images && booking.images.length > 0 && (
                                   <div className="mt-2">
                                     <div className="text-gray-400 text-xs mb-1 flex items-center">
-                                      📷 图片 ({booking.images.length}) - 点击放大
+                                      📷 图片 ({booking.images.length}) - 👆 点击放大
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                       {booking.images.slice(0, 3).map((url, idx) => (
-                                        <div key={idx} className="relative group">
+                                        <button
+                                          key={idx}
+                                          onClick={() => {
+                                            console.log('桌面端图片点击:', url);
+                                            setViewingImage(url);
+                                          }}
+                                          className="relative group focus:outline-none focus:ring-2 focus:ring-cyan-400 rounded"
+                                        >
                                           <img
                                             src={url}
                                             alt={`图${idx + 1}`}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setViewingImage(url);
-                                            }}
                                             className="w-12 h-12 object-cover rounded border border-white/20 cursor-pointer hover:border-cyan-400 hover:scale-110 transition-all shadow-md"
                                           />
-                                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded">
+                                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center rounded pointer-events-none">
                                             <Eye className="w-4 h-4 text-white" />
                                           </div>
-                                        </div>
+                                        </button>
                                       ))}
                                       {booking.images.length > 3 && (
-                                        <div className="w-12 h-12 bg-white/5 rounded border border-white/20 flex items-center justify-center hover:bg-white/10 transition-all cursor-pointer">
+                                        <div className="w-12 h-12 bg-white/5 rounded border border-white/20 flex items-center justify-center">
                                           <span className="text-white text-xs font-bold">+{booking.images.length - 3}</span>
                                         </div>
                                       )}
@@ -1886,8 +1899,8 @@ const EastMountTravelSystem = () => {
                                   <div className="flex items-center justify-between pt-2 border-t border-white/20">
                                     <span className="text-gray-300 text-sm font-medium">总价:</span>
                                     <div className="flex items-center">
-                                      <DollarSign className="w-5 h-5 text-green-400" />
-                                      <span className="text-3xl font-bold text-green-400">
+                                      <DollarSign className={`w-5 h-5 ${getPriceColor(booking.payment_status)}`} />
+                                      <span className={`text-3xl font-bold ${getPriceColor(booking.payment_status)}`}>
                                         {totalPrice.toFixed(2)}
                                       </span>
                                     </div>
@@ -2102,7 +2115,7 @@ const EastMountTravelSystem = () => {
                                         {totalPrice > 0 && (
                                           <>
                                             <span className="text-gray-400">•</span>
-                                            <span className="text-green-400 font-semibold">¥{totalPrice.toFixed(2)}</span>
+                                            <span className={`${getPriceColor(booking.payment_status)} font-semibold`}>¥{totalPrice.toFixed(2)}</span>
                                           </>
                                         )}
                                         <span className="text-gray-400">•</span>
@@ -2812,10 +2825,10 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
               
               {canViewFinance && (formData.deposit || formData.balance) && (
                 <div className="md:col-span-2">
-                  <div className="bg-green-500/20 border border-green-400/30 rounded-xl p-4">
+                  <div className={`${(formData.paymentStatus || '未结算') === '已结算' ? 'bg-green-500/20 border-green-400/30' : 'bg-red-500/20 border-red-400/30'} rounded-xl p-4`}>
                     <div className="flex items-center justify-between">
-                      <span className="text-green-300 font-medium text-lg">总价：</span>
-                      <span className="text-3xl font-bold text-green-400">¥{totalPrice.toFixed(2)}</span>
+                      <span className={`${getPriceColor(formData.paymentStatus)} font-medium text-lg`}>总价：</span>
+                      <span className={`text-3xl font-bold ${getPriceColor(formData.paymentStatus)}`}>¥{totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -3373,7 +3386,7 @@ const FinanceReportModal = ({ bookings, calculateTotalPrice, statusConfig, onClo
                         <td className="py-3 px-4 text-right text-gray-300">¥{(parseFloat(booking.deposit) || 0).toFixed(2)}</td>
                         <td className="py-3 px-4 text-right text-gray-300">¥{(parseFloat(booking.balance) || 0).toFixed(2)}</td>
                         <td className="py-3 px-4 text-right">
-                          <span className="text-green-400 font-bold text-lg">¥{totalPrice.toFixed(2)}</span>
+                          <span className={`${getPriceColor(booking.payment_status)} font-bold text-lg`}>¥{totalPrice.toFixed(2)}</span>
                         </td>
                       </tr>
                     );
@@ -3639,7 +3652,7 @@ const DayBookingsModal = ({ date, bookings, calculateTotalPrice, statusConfig, o
                         </div>
                         
                         <div className="ml-4 text-right">
-                          <div className="text-green-400 text-2xl font-bold">¥{totalPrice.toFixed(2)}</div>
+                          <div className={`${getPriceColor(booking.payment_status)} text-2xl font-bold`}>¥{totalPrice.toFixed(2)}</div>
                           <div className="text-gray-400 text-xs mt-1">
                             定金¥{(parseFloat(booking.deposit) || 0).toFixed(2)}
                           </div>
@@ -3748,8 +3761,19 @@ const ImageViewer = ({ imageUrl, onClose }) => {
   const [position, setPosition] = React.useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = React.useState(false);
   const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
+  
+  // 双指缩放相关状态
+  const [initialDistance, setInitialDistance] = React.useState(0);
+  const [initialScale, setInitialScale] = React.useState(1);
 
   if (!imageUrl) return null;
+
+  // 计算两个触摸点之间的距离
+  const getDistance = (touch1, touch2) => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
 
   // 键盘快捷键
   React.useEffect(() => {
@@ -3799,7 +3823,7 @@ const ImageViewer = ({ imageUrl, onClose }) => {
     setScale(prev => Math.max(0.25, Math.min(5, prev + delta)));
   };
 
-  // 拖拽功能
+  // 鼠标拖拽
   const handleMouseDown = (e) => {
     if (scale > 1) {
       setIsDragging(true);
@@ -3820,9 +3844,16 @@ const ImageViewer = ({ imageUrl, onClose }) => {
     setIsDragging(false);
   };
 
-  // 触摸设备支持
+  // 触摸事件处理（支持双指缩放）
   const handleTouchStart = (e) => {
-    if (e.touches.length === 1 && scale > 1) {
+    if (e.touches.length === 2) {
+      // 双指缩放开始
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      setInitialDistance(distance);
+      setInitialScale(scale);
+      setIsDragging(false);
+    } else if (e.touches.length === 1 && scale > 1) {
+      // 单指拖拽
       setIsDragging(true);
       setDragStart({ 
         x: e.touches[0].clientX - position.x, 
@@ -3832,7 +3863,16 @@ const ImageViewer = ({ imageUrl, onClose }) => {
   };
 
   const handleTouchMove = (e) => {
-    if (isDragging && e.touches.length === 1 && scale > 1) {
+    e.preventDefault(); // 防止页面滚动
+    
+    if (e.touches.length === 2) {
+      // 双指缩放
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      const scaleChange = distance / initialDistance;
+      const newScale = Math.max(0.25, Math.min(5, initialScale * scaleChange));
+      setScale(newScale);
+    } else if (isDragging && e.touches.length === 1 && scale > 1) {
+      // 单指拖拽
       setPosition({
         x: e.touches[0].clientX - dragStart.x,
         y: e.touches[0].clientY - dragStart.y
@@ -3842,6 +3882,7 @@ const ImageViewer = ({ imageUrl, onClose }) => {
 
   const handleTouchEnd = () => {
     setIsDragging(false);
+    setInitialDistance(0);
   };
 
   return (
@@ -3852,6 +3893,7 @@ const ImageViewer = ({ imageUrl, onClose }) => {
       onMouseUp={handleMouseUp}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      style={{ touchAction: 'none' }} // 禁用浏览器默认触摸行为
     >
       <div className="relative max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
         {/* 顶部工具栏 */}
@@ -3911,7 +3953,8 @@ const ImageViewer = ({ imageUrl, onClose }) => {
           className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-transform select-none"
           style={{
             transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
-            cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+            cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+            touchAction: 'none'
           }}
           onClick={(e) => e.stopPropagation()}
           onWheel={handleWheel}
@@ -3923,7 +3966,7 @@ const ImageViewer = ({ imageUrl, onClose }) => {
         {/* 底部提示 */}
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-md px-6 py-3 rounded-full shadow-xl">
           <p className="text-white text-xs sm:text-sm text-center">
-            {scale > 1 ? '🖱️ 拖拽移动 · ' : ''}🖱️ 滚轮缩放 · ⌨️ +/- 缩放 · 🖱️ 点击关闭 · ⌨️ Esc 关闭
+            📱 双指缩放 · {scale > 1 ? '🖱️ 拖拽移动 · ' : ''}🖱️ 滚轮缩放 · ⌨️ +/- 缩放 · ⌨️ Esc 关闭
           </p>
         </div>
 
