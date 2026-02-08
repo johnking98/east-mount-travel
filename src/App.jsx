@@ -117,13 +117,6 @@ const EastMountTravelSystem = () => {
     return 'bg-yellow-500/10 border-yellow-400/20';
   };
 
-  // 根据结算状态获取价格颜色
-  const getPriceColor = (paymentStatus) => {
-    return (paymentStatus || '未结算') === '已结算' 
-      ? 'text-green-400'  // 已结算 - 绿色
-      : 'text-red-400';   // 未结算 - 红色
-  };
-
   // 加载系统设置
   const loadSystemSettings = async () => {
     if (!supabase) return;
@@ -1700,8 +1693,8 @@ const EastMountTravelSystem = () => {
                                 </span>
                               </div>
                               <div className="flex items-center">
-                                <span className={`${getPriceColor(booking.payment_status)} text-sm mr-1`}>¥</span>
-                                <span className={`${getPriceColor(booking.payment_status)} text-xl font-bold`}>{totalPrice.toFixed(2)}</span>
+                                <span className={`${(booking.payment_status || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'} text-sm mr-1`}>¥</span>
+                                <span className={`${(booking.payment_status || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'} text-xl font-bold`}>{totalPrice.toFixed(2)}</span>
                               </div>
                             </div>
                           )}
@@ -1899,8 +1892,8 @@ const EastMountTravelSystem = () => {
                                   <div className="flex items-center justify-between pt-2 border-t border-white/20">
                                     <span className="text-gray-300 text-sm font-medium">总价:</span>
                                     <div className="flex items-center">
-                                      <DollarSign className={`w-5 h-5 ${getPriceColor(booking.payment_status)}`} />
-                                      <span className={`text-3xl font-bold ${getPriceColor(booking.payment_status)}`}>
+                                      <DollarSign className={`w-5 h-5 ${(booking.payment_status || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'}`} />
+                                      <span className={`text-3xl font-bold ${(booking.payment_status || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'}`}>
                                         {totalPrice.toFixed(2)}
                                       </span>
                                     </div>
@@ -2115,7 +2108,7 @@ const EastMountTravelSystem = () => {
                                         {totalPrice > 0 && (
                                           <>
                                             <span className="text-gray-400">•</span>
-                                            <span className={`${getPriceColor(booking.payment_status)} font-semibold`}>¥{totalPrice.toFixed(2)}</span>
+                                            <span className={`${(booking.payment_status || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'} font-semibold`}>¥{totalPrice.toFixed(2)}</span>
                                           </>
                                         )}
                                         <span className="text-gray-400">•</span>
@@ -2827,8 +2820,8 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                 <div className="md:col-span-2">
                   <div className={`${(formData.paymentStatus || '未结算') === '已结算' ? 'bg-green-500/20 border-green-400/30' : 'bg-red-500/20 border-red-400/30'} rounded-xl p-4`}>
                     <div className="flex items-center justify-between">
-                      <span className={`${getPriceColor(formData.paymentStatus)} font-medium text-lg`}>总价：</span>
-                      <span className={`text-3xl font-bold ${getPriceColor(formData.paymentStatus)}`}>¥{totalPrice.toFixed(2)}</span>
+                      <span className={`${(formData.paymentStatus || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'} font-medium text-lg`}>总价：</span>
+                      <span className={`text-3xl font-bold ${(formData.paymentStatus || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'}`}>¥{totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -3386,7 +3379,7 @@ const FinanceReportModal = ({ bookings, calculateTotalPrice, statusConfig, onClo
                         <td className="py-3 px-4 text-right text-gray-300">¥{(parseFloat(booking.deposit) || 0).toFixed(2)}</td>
                         <td className="py-3 px-4 text-right text-gray-300">¥{(parseFloat(booking.balance) || 0).toFixed(2)}</td>
                         <td className="py-3 px-4 text-right">
-                          <span className={`${getPriceColor(booking.payment_status)} font-bold text-lg`}>¥{totalPrice.toFixed(2)}</span>
+                          <span className={`${(booking.payment_status || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'} font-bold text-lg`}>¥{totalPrice.toFixed(2)}</span>
                         </td>
                       </tr>
                     );
@@ -3652,7 +3645,7 @@ const DayBookingsModal = ({ date, bookings, calculateTotalPrice, statusConfig, o
                         </div>
                         
                         <div className="ml-4 text-right">
-                          <div className={`${getPriceColor(booking.payment_status)} text-2xl font-bold`}>¥{totalPrice.toFixed(2)}</div>
+                          <div className={`${(booking.payment_status || '未结算') === '已结算' ? 'text-green-400' : 'text-red-400'} text-2xl font-bold`}>¥{totalPrice.toFixed(2)}</div>
                           <div className="text-gray-400 text-xs mt-1">
                             定金¥{(parseFloat(booking.deposit) || 0).toFixed(2)}
                           </div>
