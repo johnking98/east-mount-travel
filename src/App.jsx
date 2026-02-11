@@ -56,6 +56,7 @@ const EastMountTravelSystem = () => {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [viewingImage, setViewingImage] = useState(null); // 查看大图
   const [rememberUsername, setRememberUsername] = useState(false); // 记住用户名（仅用户名，不记住密码）
+  const [filterAssignedTo, setFilterAssignedTo] = useState(''); // 按负责人过滤
   
   const [formData, setFormData] = useState({
     serviceType: '接机',
@@ -116,6 +117,66 @@ const EastMountTravelSystem = () => {
     // 其他情况（待服务+已结算 或 已完成+未结算）- 黄色
     return 'bg-yellow-500/10 border-yellow-400/20';
   };
+
+  // 💾 页面加载时恢复登录状态
+  React.useEffect(() => {
+    const restoreLoginState = () => {
+      try {
+        const savedIsLoggedIn = localStorage.getItem('isLoggedIn');
+        const savedUserData = localStorage.getItem('currentUser');
+        
+        if (savedIsLoggedIn === 'true' && savedUserData) {
+          const userData = JSON.parse(savedUserData);
+          
+          // 🔒 严格验证：确保role有效
+          const validRoles = ['admin', 'manager', 'viewer', 'driver'];
+          if (!validRoles.includes(userData.role)) {
+            console.warn('检测到无效的role，自动修正为viewer');
+            userData.role = 'viewer';
+          }
+          
+          // 检查登录时间，如果超过7天则需要重新登录
+          const loginTime = userData.loginTime ? new Date(userData.loginTime) : new Date(0);
+          const daysSinceLogin = (new Date() - loginTime) / (1000 * 60 * 60 * 24);
+          
+          if (daysSinceLogin > 7) {
+            console.log('登录已过期（超过7天），请重新登录');
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('currentUser');
+            return;
+          }
+          
+          // 恢复登录状态
+          setCurrentUser(userData);
+          setIsLoggedIn(true);
+          console.log('已恢复登录状态:', userData.username, '角色:', userData.role);
+          
+          // 自动加载数据
+          if (supabase) {
+            loadBookings();
+            loadSystemSettings();
+            if (userData.role === 'admin') {
+              loadPermissionRequests();
+              loadPendingUsers();
+            }
+          }
+        }
+        
+        // 恢复记住的用户名
+        const savedUsername = localStorage.getItem('savedUsername');
+        if (savedUsername) {
+          setLoginForm(prev => ({ ...prev, username: savedUsername }));
+          setRememberUsername(true);
+        }
+      } catch (error) {
+        console.error('恢复登录状态失败:', error);
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('currentUser');
+      }
+    };
+    
+    restoreLoginState();
+  }, [supabase]);
 
   // 加载系统设置
   const loadSystemSettings = async () => {
@@ -266,6 +327,19 @@ const EastMountTravelSystem = () => {
         return;
       }
 
+      // 🔒 严格验证：确保只有admin和manager可以看到金额
+      // 如果role不是这三个之一，强制设置为viewer
+      const validRoles = ['admin', 'manager', 'viewer', 'driver'];
+      if (!validRoles.includes(data.role)) {
+        console.warn('检测到无效的role，自动修正为viewer');
+        data.role = 'viewer';
+        // 同时更新数据库
+        await supabase
+          .from('users')
+          .update({ role: 'viewer' })
+          .eq('id', data.id);
+      }
+
       // 保存用户名（不保存密码）
       if (rememberUsername) {
         localStorage.setItem('savedUsername', loginForm.username);
@@ -276,6 +350,19 @@ const EastMountTravelSystem = () => {
       // 确保清除旧版本可能保存的密码
       localStorage.removeItem('savedPassword');
       localStorage.removeItem('autoLogin');
+
+      // 💾 保持登录状态：保存用户信息到localStorage
+      const userDataToSave = {
+        id: data.id,
+        username: data.username,
+        display_name: data.display_name,
+        role: data.role,
+        status: data.status,
+        created_at: data.created_at,
+        loginTime: new Date().toISOString()
+      };
+      localStorage.setItem('currentUser', JSON.stringify(userDataToSave));
+      localStorage.setItem('isLoggedIn', 'true');
 
       setCurrentUser(data);
       setIsLoggedIn(true);
@@ -906,7 +993,8 @@ const EastMountTravelSystem = () => {
       booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.customer_phone?.includes(searchTerm);
     const matchesDate = !filterDate || booking.date === filterDate;
-    return matchesSearch && matchesDate;
+    const matchesAssignedTo = !filterAssignedTo || booking.assigned_to === filterAssignedTo;
+    return matchesSearch && matchesDate && matchesAssignedTo;
   });
 
   const groupedByDate = filteredBookings.reduce((acc, booking) => {
@@ -1231,8 +1319,13 @@ const EastMountTravelSystem = () => {
               </button>
               <button
                 onClick={() => {
+                  // 清除登录状态
                   setIsLoggedIn(false);
                   setCurrentUser(null);
+                  // 清除localStorage
+                  localStorage.removeItem('isLoggedIn');
+                  localStorage.removeItem('currentUser');
+                  console.log('已退出登录');
                 }}
                 className="bg-red-500/20 hover:bg-red-500/30 backdrop-blur-sm text-white px-6 py-3 rounded-xl font-semibold flex items-center space-x-2 transition-all border border-red-400/30"
               >
@@ -1361,9 +1454,14 @@ const EastMountTravelSystem = () => {
 
               <button
                 onClick={() => {
+                  // 清除登录状态
                   setIsLoggedIn(false);
                   setCurrentUser(null);
                   setShowMobileMenu(false);
+                  // 清除localStorage
+                  localStorage.removeItem('isLoggedIn');
+                  localStorage.removeItem('currentUser');
+                  console.log('已退出登录');
                 }}
                 className="w-full bg-red-500/20 hover:bg-red-500/30 text-white px-5 py-4 rounded-xl font-medium flex items-center space-x-3 transition-all border border-red-400/30"
               >
@@ -1412,6 +1510,20 @@ const EastMountTravelSystem = () => {
               >
                 日历视图
               </button>
+              
+              {/* 按负责人过滤 */}
+              <select
+                value={filterAssignedTo}
+                onChange={(e) => setFilterAssignedTo(e.target.value)}
+                className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base bg-white/10 text-gray-300 hover:bg-white/20 border border-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400 cursor-pointer"
+              >
+                <option value="" className="bg-slate-800 text-white">全部负责人</option>
+                {[...new Set(bookings.map(b => b.assigned_to).filter(Boolean))].sort().map(assignedTo => (
+                  <option key={assignedTo} value={assignedTo} className="bg-slate-800 text-white">
+                    {assignedTo}
+                  </option>
+                ))}
+              </select>
             </div>
             </div>
             <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full md:w-auto">
