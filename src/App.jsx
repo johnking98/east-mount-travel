@@ -57,6 +57,7 @@ const EastMountTravelSystem = () => {
   const [viewingImage, setViewingImage] = useState(null); // 查看大图
   const [rememberUsername, setRememberUsername] = useState(false); // 记住用户名（仅用户名，不记住密码）
   const [filterAssignedTo, setFilterAssignedTo] = useState(''); // 按负责人过滤
+  const [allActiveUsers, setAllActiveUsers] = useState([]); // 所有活跃用户（用于分配下拉框）
   
   const [formData, setFormData] = useState({
     serviceType: '接机',
@@ -159,6 +160,9 @@ const EastMountTravelSystem = () => {
               loadPermissionRequests();
               loadPendingUsers();
             }
+            if (userData.role === 'admin' || userData.role === 'manager') {
+              loadActiveUsers();
+            }
           }
         }
         
@@ -225,6 +229,10 @@ const EastMountTravelSystem = () => {
         loadPermissionRequests();
         loadPendingUsers();
       }
+      // admin和manager可以分配订单，需要加载用户列表
+      if (currentUser?.role === 'admin' || currentUser?.role === 'manager') {
+        loadActiveUsers();
+      }
       
       // 实时订阅
       const channel = supabase
@@ -289,6 +297,23 @@ const EastMountTravelSystem = () => {
       setPendingUsers(data || []);
     } catch (error) {
       console.error('加载待审核用户失败:', error);
+    }
+  };
+
+  // 加载所有活跃用户（用于订单分配下拉框）
+  const loadActiveUsers = async () => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, display_name, role')
+        .eq('status', 'active')
+        .order('display_name', { ascending: true });
+
+      if (error) throw error;
+      setAllActiveUsers(data || []);
+    } catch (error) {
+      console.error('加载用户列表失败:', error);
     }
   };
 
@@ -988,7 +1013,22 @@ const EastMountTravelSystem = () => {
     return deposit + balance;
   };
 
+  // 判断是否为高权限用户（可看全部订单）
+  const isHighPrivilege = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+
   const filteredBookings = bookings.filter(booking => {
+    // 低权限用户只能看分配给自己的订单
+    if (!isHighPrivilege) {
+      const myDisplayName = currentUser?.display_name;
+      if (booking.assigned_to !== myDisplayName) return false;
+      // 低权限用户也可以在自己的订单中搜索
+      const matchesSearch = !searchTerm ||
+        booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        booking.customer_phone?.includes(searchTerm);
+      const matchesDate = !filterDate || booking.date === filterDate;
+      return matchesSearch && matchesDate;
+    }
+    // 高权限用户：正常搜索+过滤
     const matchesSearch = 
       booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.customer_phone?.includes(searchTerm);
@@ -1480,51 +1520,53 @@ const EastMountTravelSystem = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 w-full md:w-auto">
               <div className="flex space-x-2 min-w-max md:min-w-0">
-              <button
-                onClick={() => setActiveView('list')}
-                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
-                  activeView === 'list' 
-                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
-                    : 'bg-white/10 text-gray-300 hover:bg-white/20'
-                }`}
-              >
-                订单列表
-              </button>
-              <button
-                onClick={() => setActiveView('schedule')}
-                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
-                  activeView === 'schedule' 
-                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
-                    : 'bg-white/10 text-gray-300 hover:bg-white/20'
-                }`}
-              >
-                日程视图
-              </button>
-              <button
-                onClick={() => setActiveView('calendar')}
-                className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
-                  activeView === 'calendar' 
-                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
-                    : 'bg-white/10 text-gray-300 hover:bg-white/20'
-                }`}
-              >
-                日历视图
-              </button>
-              
-              {/* 按负责人过滤 */}
-              <select
-                value={filterAssignedTo}
-                onChange={(e) => setFilterAssignedTo(e.target.value)}
-                className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base bg-white/10 text-gray-300 hover:bg-white/20 border border-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400 cursor-pointer"
-              >
-                <option value="" className="bg-slate-800 text-white">全部负责人</option>
-                {[...new Set(bookings.map(b => b.assigned_to).filter(Boolean))].sort().map(assignedTo => (
-                  <option key={assignedTo} value={assignedTo} className="bg-slate-800 text-white">
-                    {assignedTo}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <button
+                  onClick={() => setActiveView('list')}
+                  className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
+                    activeView === 'list' 
+                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
+                      : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                  }`}
+                >
+                  {isHighPrivilege ? '订单列表' : '我的订单'}
+                </button>
+                <button
+                  onClick={() => setActiveView('schedule')}
+                  className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
+                    activeView === 'schedule' 
+                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
+                      : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                  }`}
+                >
+                  日程视图
+                </button>
+                <button
+                  onClick={() => setActiveView('calendar')}
+                  className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
+                    activeView === 'calendar' 
+                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg' 
+                      : 'bg-white/10 text-gray-300 hover:bg-white/20'
+                  }`}
+                >
+                  日历视图
+                </button>
+                
+                {/* 按负责人过滤 - 仅高权限用户可见 */}
+                {isHighPrivilege && (
+                  <select
+                    value={filterAssignedTo}
+                    onChange={(e) => setFilterAssignedTo(e.target.value)}
+                    className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base bg-white/10 text-gray-300 hover:bg-white/20 border border-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400 cursor-pointer"
+                  >
+                    <option value="" className="bg-slate-800 text-white">全部负责人</option>
+                    {allActiveUsers.map(user => (
+                      <option key={user.id} value={user.display_name} className="bg-slate-800 text-white">
+                        {user.display_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full md:w-auto">
               {currentUser.role === 'admin' && (
@@ -1536,16 +1578,28 @@ const EastMountTravelSystem = () => {
                   <span>新建订单</span>
                 </button>
               )}
-              <button
-                onClick={handleExport}
-                disabled={bookings.length === 0}
-                className="w-full sm:w-auto bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-4 sm:px-6 py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 transition-all disabled:opacity-50 text-sm sm:text-base"
-              >
-                <Download className="w-5 h-5" />
-                <span>导出数据</span>
-              </button>
+              {isHighPrivilege && (
+                <button
+                  onClick={handleExport}
+                  disabled={bookings.length === 0}
+                  className="w-full sm:w-auto bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-4 sm:px-6 py-3 rounded-xl font-semibold flex items-center justify-center space-x-2 transition-all disabled:opacity-50 text-sm sm:text-base"
+                >
+                  <Download className="w-5 h-5" />
+                  <span>导出数据</span>
+                </button>
+              )}
             </div>
           </div>
+
+          {/* 低权限用户提示条 */}
+          {!isHighPrivilege && (
+            <div className="mt-4 bg-cyan-500/10 border border-cyan-400/30 rounded-xl px-4 py-3 flex items-center space-x-2">
+              <User className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+              <span className="text-cyan-300 text-sm">
+                您好，<strong>{currentUser.display_name}</strong>！以下是分配给您的订单，共 <strong>{filteredBookings.length}</strong> 条。
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Search and Filter */}
@@ -1583,8 +1637,8 @@ const EastMountTravelSystem = () => {
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-xl p-6 border border-blue-400/30">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100 text-sm font-medium">总订单数</p>
-                <p className="text-4xl font-bold text-white mt-2">{bookings.length}</p>
+                <p className="text-blue-100 text-sm font-medium">{isHighPrivilege ? '总订单数' : '我的订单数'}</p>
+                <p className="text-4xl font-bold text-white mt-2">{isHighPrivilege ? bookings.length : filteredBookings.length}</p>
               </div>
               <Briefcase className="w-12 h-12 text-blue-200" />
             </div>
@@ -1594,7 +1648,7 @@ const EastMountTravelSystem = () => {
               <div>
                 <p className="text-cyan-100 text-sm font-medium">今日订单</p>
                 <p className="text-4xl font-bold text-white mt-2">
-                  {bookings.filter(b => b.date === new Date().toISOString().split('T')[0]).length}
+                  {filteredBookings.filter(b => b.date === new Date().toISOString().split('T')[0]).length}
                 </p>
               </div>
               <Calendar className="w-12 h-12 text-cyan-200" />
@@ -1603,40 +1657,54 @@ const EastMountTravelSystem = () => {
           <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-2xl shadow-xl p-6 border border-amber-400/30">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-amber-100 text-sm font-medium">总乘客数</p>
+                <p className="text-amber-100 text-sm font-medium">{isHighPrivilege ? '总乘客数' : '我的乘客数'}</p>
                 <p className="text-4xl font-bold text-white mt-2">
-                  {bookings.reduce((sum, b) => sum + (parseInt(b.passengers) || 0), 0)}
+                  {filteredBookings.reduce((sum, b) => sum + (parseInt(b.passengers) || 0), 0)}
                 </p>
               </div>
               <Users className="w-12 h-12 text-amber-200" />
             </div>
           </div>
-          <button
-            onClick={() => canViewFinance && setShowFinanceReport(true)}
-            disabled={!canViewFinance}
-            className={`bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 border border-green-400/30 w-full transition-all transform ${
-              canViewFinance 
-                ? 'hover:from-green-600 hover:to-emerald-700 hover:scale-105 cursor-pointer' 
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="text-left">
-                <p className="text-green-100 text-sm font-medium flex items-center">
-                  总收入
-                  <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full">点击查看明细</span>
-                </p>
-                <p className="text-4xl font-bold text-white mt-2">
-                  {canViewFinance ? (
-                    `¥${bookings.reduce((sum, b) => sum + calculateTotalPrice(b), 0).toFixed(2)}`
-                  ) : (
-                    <span className="text-2xl text-gray-400">权限不足</span>
-                  )}
-                </p>
+          {isHighPrivilege ? (
+            <button
+              onClick={() => canViewFinance && setShowFinanceReport(true)}
+              disabled={!canViewFinance}
+              className={`bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-xl p-6 border border-green-400/30 w-full transition-all transform ${
+                canViewFinance 
+                  ? 'hover:from-green-600 hover:to-emerald-700 hover:scale-105 cursor-pointer' 
+                  : 'opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-left">
+                  <p className="text-green-100 text-sm font-medium flex items-center">
+                    总收入
+                    <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full">点击查看明细</span>
+                  </p>
+                  <p className="text-4xl font-bold text-white mt-2">
+                    {canViewFinance ? (
+                      `¥${bookings.reduce((sum, b) => sum + calculateTotalPrice(b), 0).toFixed(2)}`
+                    ) : (
+                      <span className="text-2xl text-gray-400">权限不足</span>
+                    )}
+                  </p>
+                </div>
+                <DollarSign className="w-12 h-12 text-green-200" />
               </div>
-              <DollarSign className="w-12 h-12 text-green-200" />
+            </button>
+          ) : (
+            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-xl p-6 border border-purple-400/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-purple-100 text-sm font-medium">待完成订单</p>
+                  <p className="text-4xl font-bold text-white mt-2">
+                    {filteredBookings.filter(b => b.status === '待服务').length}
+                  </p>
+                </div>
+                <Clock className="w-12 h-12 text-purple-200" />
+              </div>
             </div>
-          </button>
+          )}
         </div>
 
         {/* 订单列表/日程视图继续... */}
@@ -1654,7 +1722,14 @@ const EastMountTravelSystem = () => {
                 {filteredBookings.length === 0 ? (
                   <div className="bg-white/5 backdrop-blur-md rounded-2xl shadow-xl p-16 text-center border border-white/10">
                     <Car className="w-20 h-20 text-gray-500 mx-auto mb-4" />
-                    <p className="text-gray-400 text-xl">暂无订单数据</p>
+                    {isHighPrivilege ? (
+                      <p className="text-gray-400 text-xl">暂无订单数据</p>
+                    ) : (
+                      <>
+                        <p className="text-gray-300 text-xl font-semibold mb-2">暂无分配给您的订单</p>
+                        <p className="text-gray-500 text-sm">订单由管理员分配，请联系管理员</p>
+                      </>
+                    )}
                   </div>
                 ) : (
                   filteredBookings.map((booking) => {
@@ -2890,13 +2965,27 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
               
               <div>
                 <label className="block text-gray-300 font-medium mb-2">订单分配人员</label>
-                <input
-                  type="text"
+                <select
                   value={formData.assignedTo}
                   onChange={(e) => setFormData({...formData, assignedTo: e.target.value})}
-                  placeholder="例如: 张师傅、李师傅等"
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                />
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                >
+                  <option value="" className="bg-slate-800 text-gray-400">-- 暂不分配 --</option>
+                  {allActiveUsers.length > 0 ? (
+                    allActiveUsers.map(user => (
+                      <option key={user.id} value={user.display_name} className="bg-slate-800 text-white">
+                        {user.display_name}（{user.role === 'admin' ? '管理员' : user.role === 'manager' ? '经理' : user.role === 'driver' ? '司机' : '普通用户'}）
+                      </option>
+                    ))
+                  ) : (
+                    <option disabled className="bg-slate-800 text-gray-400">加载中...</option>
+                  )}
+                </select>
+                {formData.assignedTo && (
+                  <p className="text-cyan-400 text-xs mt-1">
+                    ✅ 已分配给：{formData.assignedTo}（该用户将在登录后看到此订单）
+                  </p>
+                )}
               </div>
               
               {/* 定金尾款 - 仅admin和manager可见 */}
