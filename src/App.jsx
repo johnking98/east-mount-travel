@@ -2518,6 +2518,7 @@ const EastMountTravelSystem = () => {
           onRemoveImage={handleRemoveImage}
           setViewingImage={setViewingImage}
           canViewFinance={canViewFinance}
+          allActiveUsers={allActiveUsers}
         />
       )}
 
@@ -2735,7 +2736,7 @@ const EastMountTravelSystem = () => {
 
 // 组件定义继续...
 // 订单表单 Modal 组件
-const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose, uploadingImage, onImageUpload, onRemoveImage, setViewingImage, canViewFinance }) => {
+const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubmit, onClose, uploadingImage, onImageUpload, onRemoveImage, setViewingImage, canViewFinance, allActiveUsers = [] }) => {
   const totalPrice = (parseFloat(formData.deposit) || 0) + (parseFloat(formData.balance) || 0);
   const isCharterService = formData.serviceType === '包车';
 
