@@ -57,8 +57,6 @@ const EastMountTravelSystem = () => {
   const [viewingImage, setViewingImage] = useState(null); // 查看大图
   const [rememberUsername, setRememberUsername] = useState(false); // 记住用户名（仅用户名，不记住密码）
   const [filterAssignedTo, setFilterAssignedTo] = useState(''); // 按负责人过滤
-  const [filterSource, setFilterSource] = useState(''); // 按订单来源过滤
-  const [sortOrder, setSortOrder] = useState('date_desc'); // 排序：date_desc新到旧, date_asc旧到新
   const [allActiveUsers, setAllActiveUsers] = useState([]); // 所有活跃用户（用于分配下拉框）
   
   const [formData, setFormData] = useState({
@@ -78,13 +76,13 @@ const EastMountTravelSystem = () => {
     flightNumber: '',  // 航班号（可选）
     notes: '',
     itinerary: '',
+    charterDates: [],  // 包车多日期：[{date:'YYYY-MM-DD', note:''}, ...]
     deposit: '',
     balance: '',
     status: '待服务',
     paymentStatus: '未结算',  // 结算状态（独立于服务状态）
     source: '',
     assignedTo: '',
-    vehicle: '',  // 车辆分配
     images: []  // 订单图片数组
   });
 
@@ -133,7 +131,7 @@ const EastMountTravelSystem = () => {
           const userData = JSON.parse(savedUserData);
           
           // 🔒 严格验证：确保role有效
-          const validRoles = ['admin', 'manager', 'viewer', 'driver', 'partner'];
+          const validRoles = ['admin', 'manager', 'viewer', 'driver'];
           if (!validRoles.includes(userData.role)) {
             console.warn('检测到无效的role，自动修正为viewer');
             userData.role = 'viewer';
@@ -256,14 +254,9 @@ const EastMountTravelSystem = () => {
     if (!supabase) return;
     try {
       setLoading(true);
-      let query = supabase.from('bookings').select('*');
-
-      // partner角色只能看到自己公司来源的订单（数据库层面过滤）
-      if (currentUser?.role === 'partner' && currentUser?.source_filter) {
-        query = query.eq('source', currentUser.source_filter);
-      }
-
-      const { data, error } = await query
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*')
         .order('date', { ascending: true })
         .order('time', { ascending: true });
 
@@ -362,7 +355,7 @@ const EastMountTravelSystem = () => {
 
       // 🔒 严格验证：确保只有admin和manager可以看到金额
       // 如果role不是这三个之一，强制设置为viewer
-      const validRoles = ['admin', 'manager', 'viewer', 'driver', 'partner'];
+      const validRoles = ['admin', 'manager', 'viewer', 'driver'];
       if (!validRoles.includes(data.role)) {
         console.warn('检测到无效的role，自动修正为viewer');
         data.role = 'viewer';
@@ -391,7 +384,6 @@ const EastMountTravelSystem = () => {
         display_name: data.display_name,
         role: data.role,
         status: data.status,
-        source_filter: data.source_filter || null, // 合作方来源过滤
         created_at: data.created_at,
         loginTime: new Date().toISOString()
       };
@@ -807,12 +799,8 @@ const EastMountTravelSystem = () => {
     if (!supabase) return;
 
     if (formData.serviceType === '包车') {
-      if (!formData.endDate) {
-        alert('包车服务请填写结束日期');
-        return;
-      }
-      if (formData.endDate < formData.date) {
-        alert('结束日期不能早于起始日期');
+      if (!formData.charterDates || formData.charterDates.length === 0) {
+        alert('包车服务请至少选择一个日期');
         return;
       }
     }
@@ -822,8 +810,12 @@ const EastMountTravelSystem = () => {
       
       const bookingData = {
         service_type: formData.serviceType,
-        date: formData.date,
-        end_date: formData.serviceType === '包车' ? formData.endDate : null,
+        date: formData.serviceType === '包车'
+          ? (formData.charterDates.length > 0 ? [...formData.charterDates].sort((a,b)=>a.date.localeCompare(b.date))[0].date : formData.date)
+          : formData.date,
+        end_date: formData.serviceType === '包车'
+          ? (formData.charterDates.length > 0 ? [...formData.charterDates].sort((a,b)=>a.date.localeCompare(b.date)).slice(-1)[0].date : null)
+          : null,
         time: formData.time,
         end_time: formData.serviceType === '包车' ? formData.endTime : null,
         pickup: formData.pickup,
@@ -837,13 +829,13 @@ const EastMountTravelSystem = () => {
         flight_number: formData.flightNumber || null,  // 航班号（可选）
         notes: formData.notes || null,
         itinerary: formData.serviceType === '包车' ? (formData.itinerary || null) : null,
+        charter_dates: formData.serviceType === '包车' ? (formData.charterDates || []) : null,
         deposit: formData.deposit ? parseFloat(formData.deposit) : null,
         balance: formData.balance ? parseFloat(formData.balance) : null,
         status: formData.status || '待服务',
         payment_status: formData.paymentStatus || '未结算',  // 结算状态
         source: formData.source || null,
         assigned_to: formData.assignedTo || null,
-        vehicle: formData.vehicle || null,  // 车辆分配
         images: formData.images || []  // 图片数组
       };
       
@@ -900,13 +892,13 @@ const EastMountTravelSystem = () => {
       flightNumber: '',
       notes: '',
       itinerary: '',
+      charterDates: [],
       deposit: '',
       balance: '',
       status: '待服务',
       paymentStatus: '未结算',
       source: '',
       assignedTo: '',
-      vehicle: '',
       images: []
     });
   };
@@ -933,13 +925,13 @@ const EastMountTravelSystem = () => {
       flightNumber: booking.flight_number || '',
       notes: booking.notes || '',
       itinerary: booking.itinerary || '',
+      charterDates: booking.charter_dates || [],
       deposit: booking.deposit || '',
       balance: booking.balance || '',
       status: booking.status || '待服务',
       paymentStatus: booking.payment_status || '未结算',
       source: booking.source || '',
       assignedTo: booking.assigned_to || '',
-      vehicle: booking.vehicle || '',
       images: booking.images || []
     });
     setEditingBooking(booking);
@@ -1028,42 +1020,25 @@ const EastMountTravelSystem = () => {
   // 判断是否为高权限用户（可看全部订单）
   const isHighPrivilege = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
-  // 所有订单来源（用于下拉筛选）
-  const allSources = [...new Set(bookings.map(b => b.source).filter(Boolean))].sort();
-
   const filteredBookings = bookings.filter(booking => {
-    // 低权限用户（viewer/driver）只能看分配给自己的订单
-    if (!isHighPrivilege && currentUser?.role !== 'partner') {
+    // 低权限用户只能看分配给自己的订单
+    if (!isHighPrivilege) {
       const myDisplayName = currentUser?.display_name;
       if (booking.assigned_to !== myDisplayName) return false;
+      // 低权限用户也可以在自己的订单中搜索
       const matchesSearch = !searchTerm ||
         booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         booking.customer_phone?.includes(searchTerm);
       const matchesDate = !filterDate || booking.date === filterDate;
       return matchesSearch && matchesDate;
     }
-    // partner：数据库已过滤，只做搜索和日期过滤
-    if (currentUser?.role === 'partner') {
-      const matchesSearch = !searchTerm ||
-        booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.customer_phone?.includes(searchTerm);
-      const matchesDate = !filterDate || booking.date === filterDate;
-      return matchesSearch && matchesDate;
-    }
-    // 高权限用户：全部过滤条件
-    const matchesSearch =
+    // 高权限用户：正常搜索+过滤
+    const matchesSearch = 
       booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.customer_phone?.includes(searchTerm);
     const matchesDate = !filterDate || booking.date === filterDate;
     const matchesAssignedTo = !filterAssignedTo || booking.assigned_to === filterAssignedTo;
-    const matchesSource = !filterSource || booking.source === filterSource;
-    return matchesSearch && matchesDate && matchesAssignedTo && matchesSource;
-  }).sort((a, b) => {
-    // 排序：date_desc 新到旧，date_asc 旧到新
-    const dateA = `${a.date || ''} ${a.time || ''}`;
-    const dateB = `${b.date || ''} ${b.time || ''}`;
-    if (sortOrder === 'date_asc') return dateA.localeCompare(dateB);
-    return dateB.localeCompare(dateA); // date_desc 默认
+    return matchesSearch && matchesDate && matchesAssignedTo;
   });
 
   const groupedByDate = filteredBookings.reduce((acc, booking) => {
@@ -1095,11 +1070,17 @@ const EastMountTravelSystem = () => {
     const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
     return filteredBookings.filter(b => {
-      if (b.service_type === '包车' && b.end_date) {
-        return dateStr >= b.date && dateStr <= b.end_date;
-      } else {
-        return b.date === dateStr;
+      if (b.service_type === '包车') {
+        // 新版：检查charter_dates数组
+        if (b.charter_dates && b.charter_dates.length > 0) {
+          return b.charter_dates.some(d => d.date === dateStr);
+        }
+        // 旧版兼容：检查日期范围
+        if (b.end_date) {
+          return dateStr >= b.date && dateStr <= b.end_date;
+        }
       }
+      return b.date === dateStr;
     });
   };
 
@@ -1595,30 +1576,6 @@ const EastMountTravelSystem = () => {
                     ))}
                   </select>
                 )}
-
-                {/* 按来源筛选 - 仅高权限用户可见 */}
-                {isHighPrivilege && (
-                  <select
-                    value={filterSource}
-                    onChange={(e) => setFilterSource(e.target.value)}
-                    className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base bg-white/10 text-gray-300 hover:bg-white/20 border border-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400 cursor-pointer"
-                  >
-                    <option value="" className="bg-slate-800 text-white">全部来源</option>
-                    {allSources.map(src => (
-                      <option key={src} value={src} className="bg-slate-800 text-white">{src}</option>
-                    ))}
-                  </select>
-                )}
-
-                {/* 排序按钮 */}
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value)}
-                  className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base bg-white/10 text-gray-300 hover:bg-white/20 border border-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400 cursor-pointer"
-                >
-                  <option value="date_desc" className="bg-slate-800 text-white">⬇ 时间：新→旧</option>
-                  <option value="date_asc" className="bg-slate-800 text-white">⬆ 时间：旧→新</option>
-                </select>
               </div>
             </div>
             <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full md:w-auto">
@@ -1649,10 +1606,7 @@ const EastMountTravelSystem = () => {
             <div className="mt-4 bg-cyan-500/10 border border-cyan-400/30 rounded-xl px-4 py-3 flex items-center space-x-2">
               <User className="w-4 h-4 text-cyan-400 flex-shrink-0" />
               <span className="text-cyan-300 text-sm">
-                {currentUser?.role === 'partner'
-                  ? <>您好，<strong>{currentUser.display_name}</strong>！以下是来自贵公司的订单，共 <strong>{filteredBookings.length}</strong> 条。</>
-                  : <>您好，<strong>{currentUser.display_name}</strong>！以下是分配给您的订单，共 <strong>{filteredBookings.length}</strong> 条。</>
-                }
+                您好，<strong>{currentUser.display_name}</strong>！以下是分配给您的订单，共 <strong>{filteredBookings.length}</strong> 条。
               </span>
             </div>
           )}
@@ -1677,9 +1631,9 @@ const EastMountTravelSystem = () => {
               onChange={(e) => setFilterDate(e.target.value)}
               className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
-            {(searchTerm || filterDate || filterSource || filterAssignedTo) && (
+            {(searchTerm || filterDate) && (
               <button
-                onClick={() => { setSearchTerm(''); setFilterDate(''); setFilterSource(''); setFilterAssignedTo(''); }}
+                onClick={() => { setSearchTerm(''); setFilterDate(''); }}
                 className="px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl transition-all"
               >
                 清除
@@ -1853,7 +1807,7 @@ const EastMountTravelSystem = () => {
                           </div>
 
                           {/* 订单信息 - 来源和负责人 */}
-                          {(booking.source || booking.assigned_to || booking.vehicle) && (
+                          {(booking.source || booking.assigned_to) && (
                             <div className="flex flex-wrap gap-2 mb-3">
                               {booking.source && (
                                 <span className="text-xs bg-blue-500/10 text-blue-300 px-2 py-1 rounded border border-blue-400/20 flex items-center">
@@ -1867,12 +1821,6 @@ const EastMountTravelSystem = () => {
                                   {booking.assigned_to}
                                 </span>
                               )}
-                              {booking.vehicle && (
-                                <span className="text-xs bg-purple-500/10 text-purple-300 px-2 py-1 rounded border border-purple-400/20 flex items-center">
-                                  <span className="mr-1">🚗</span>
-                                  {booking.vehicle}
-                                </span>
-                              )}
                             </div>
                           )}
 
@@ -1882,7 +1830,18 @@ const EastMountTravelSystem = () => {
                               💬 {booking.notes}
                             </div>
                           )}
-                          {booking.itinerary && (
+                          {/* 包车：多日期每日备注 */}
+                          {booking.service_type === '包车' && booking.charter_dates && booking.charter_dates.length > 0 && (
+                            <div className="mb-3 space-y-1">
+                              {[...booking.charter_dates].sort((a,b)=>a.date.localeCompare(b.date)).map((d, i) => (
+                                <div key={i} className="text-xs bg-purple-500/10 text-purple-200 px-3 py-2 rounded-lg border border-purple-400/20 flex gap-2">
+                                  <span className="text-purple-400 font-semibold shrink-0">Day {i+1} · {d.date}</span>
+                                  {d.note && <span className="text-purple-200">{d.note}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {!booking.charter_dates && booking.itinerary && (
                             <div className="mb-3 text-xs bg-purple-500/10 text-purple-300 px-3 py-2 rounded-lg border border-purple-400/20">
                               <Route className="w-3 h-3 inline mr-1" />
                               {booking.itinerary}
@@ -2065,6 +2024,16 @@ const EastMountTravelSystem = () => {
                                     行程: {booking.itinerary}
                                   </div>
                                 )}
+                                {booking.service_type === '包车' && booking.charter_dates && booking.charter_dates.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {[...booking.charter_dates].sort((a,b)=>a.date.localeCompare(b.date)).map((d, i) => (
+                                      <div key={i} className="text-xs bg-purple-500/10 text-purple-200 px-2 py-1.5 rounded-lg border border-purple-400/20">
+                                        <span className="text-purple-400 font-semibold">Day {i+1} · {d.date}</span>
+                                        {d.note && <div className="text-purple-200 mt-0.5">{d.note}</div>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             
@@ -2081,12 +2050,7 @@ const EastMountTravelSystem = () => {
                                     <span className="text-green-300 text-sm">负责: {booking.assigned_to}</span>
                                   </div>
                                 )}
-                                {booking.vehicle && (
-                                  <div className="bg-purple-500/10 px-3 py-1.5 rounded-lg border border-purple-400/20">
-                                    <span className="text-purple-300 text-sm">🚗 车辆: {booking.vehicle}</span>
-                                  </div>
-                                )}
-                                {!booking.source && !booking.assigned_to && !booking.vehicle && (
+                                {!booking.source && !booking.assigned_to && (
                                   <div className="text-gray-500 text-sm">暂无</div>
                                 )}
                                 {/* 订单图片 */}
@@ -2842,28 +2806,14 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
               {/* 日期和时间字段 - 根据服务类型动态显示 */}
               {isCharterService ? (
                 <>
-                  <div>
-                    <label className="block text-gray-300 font-medium mb-2">起始日期 *</label>
-                    <input
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({...formData, date: e.target.value})}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      required
+                  {/* 包车：多日期选择器 */}
+                  <div className="md:col-span-2">
+                    <CharterDatePicker
+                      charterDates={formData.charterDates}
+                      onChange={(dates) => setFormData({...formData, charterDates: dates})}
                     />
                   </div>
-                  
-                  <div>
-                    <label className="block text-gray-300 font-medium mb-2">结束日期 *</label>
-                    <input
-                      type="date"
-                      value={formData.endDate}
-                      onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      required
-                    />
-                  </div>
-                  
+
                   <div>
                     <label className="block text-gray-300 font-medium mb-2">起始时间 *</label>
                     <input
@@ -2871,18 +2821,16 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                       value={formData.time}
                       onChange={(e) => setFormData({...formData, time: e.target.value})}
                       className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      required
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-gray-300 font-medium mb-2">结束时间 *</label>
+                    <label className="block text-gray-300 font-medium mb-2">结束时间</label>
                     <input
                       type="time"
                       value={formData.endTime}
                       onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                       className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                      required
                     />
                   </div>
                 </>
@@ -3055,17 +3003,6 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                   </p>
                 )}
               </div>
-
-              <div>
-                <label className="block text-gray-300 font-medium mb-2">🚗 车辆分配</label>
-                <input
-                  type="text"
-                  value={formData.vehicle}
-                  onChange={(e) => setFormData({...formData, vehicle: e.target.value})}
-                  placeholder="例如: 丰田阿尔法、奔驰V260、鲁A12345"
-                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                />
-              </div>
               
               {/* 定金尾款 - 仅admin和manager可见 */}
               {canViewFinance && (
@@ -3122,13 +3059,13 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                 <div className="md:col-span-2">
                   <label className="block text-gray-300 font-medium mb-2 flex items-center">
                     <Route className="w-4 h-4 mr-2 text-purple-400" />
-                    行程（包车服务）
+                    总体行程说明（选填）
                   </label>
                   <textarea
                     value={formData.itinerary}
                     onChange={(e) => setFormData({...formData, itinerary: e.target.value})}
-                    placeholder="例如: 上午游览市区景点，下午前往海滩，傍晚返回酒店"
-                    rows="4"
+                    placeholder="可填写整体行程概述，每天的详细安排请在上方日期选择器中填写"
+                    rows="2"
                     className="w-full px-4 py-3 bg-purple-500/10 border border-purple-400/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none"
                   />
                 </div>
@@ -4252,6 +4189,141 @@ const ImageViewer = ({ imageUrl, onClose }) => {
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+// ─── 包车多日期选择器组件 ────────────────────────────────────────────────────
+const CharterDatePicker = ({ charterDates, onChange }) => {
+  const today = new Date();
+  const [pickerMonth, setPickerMonth] = React.useState(new Date(today.getFullYear(), today.getMonth(), 1));
+
+  const year = pickerMonth.getFullYear();
+  const month = pickerMonth.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const selectedDates = new Set((charterDates || []).map(d => d.date));
+
+  const toggleDate = (dateStr) => {
+    if (selectedDates.has(dateStr)) {
+      onChange((charterDates || []).filter(d => d.date !== dateStr));
+    } else {
+      onChange([...(charterDates || []), { date: dateStr, note: '' }]);
+    }
+  };
+
+  const updateNote = (dateStr, note) => {
+    onChange((charterDates || []).map(d => d.date === dateStr ? { ...d, note } : d));
+  };
+
+  const sortedDates = [...(charterDates || [])].sort((a, b) => a.date.localeCompare(b.date));
+
+  const toDateStr = (y, m, d) =>
+    `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  return (
+    <div>
+      <label className="block text-gray-300 font-medium mb-3 flex items-center gap-2">
+        <Calendar className="w-4 h-4 text-purple-400" />
+        包车日期选择 * &nbsp;
+        <span className="text-gray-500 text-xs font-normal">（点击日期选中/取消，可跨月、不连续选择）</span>
+      </label>
+
+      {/* 日历选择器 */}
+      <div className="bg-purple-500/10 border border-purple-400/30 rounded-2xl p-4 mb-4">
+        {/* 月份导航 */}
+        <div className="flex items-center justify-between mb-3">
+          <button
+            type="button"
+            onClick={() => setPickerMonth(new Date(year, month - 1, 1))}
+            className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-white"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-white font-semibold">{year}年 {month + 1}月</span>
+          <button
+            type="button"
+            onClick={() => setPickerMonth(new Date(year, month + 1, 1))}
+            className="p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-white"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* 星期头 */}
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {['日','一','二','三','四','五','六'].map(d => (
+            <div key={d} className="text-center text-gray-500 text-xs py-1">{d}</div>
+          ))}
+        </div>
+
+        {/* 日期格子 */}
+        <div className="grid grid-cols-7 gap-1">
+          {Array(firstDay).fill(null).map((_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+            const dateStr = toDateStr(year, month, day);
+            const isSelected = selectedDates.has(dateStr);
+            const dayIndex = sortedDates.findIndex(d => d.date === dateStr);
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => toggleDate(dateStr)}
+                className={`
+                  relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all
+                  ${isSelected
+                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30 scale-105'
+                    : 'bg-white/5 text-gray-300 hover:bg-white/15 hover:text-white'}
+                `}
+              >
+                <span>{day}</span>
+                {isSelected && (
+                  <span className="text-[9px] text-purple-200 leading-none mt-0.5">
+                    D{dayIndex + 1}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 已选日期列表 + 每天备注 */}
+      {sortedDates.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-gray-400 text-xs mb-2">
+            已选 <span className="text-purple-400 font-semibold">{sortedDates.length}</span> 天，为每天填写行程安排（选填）：
+          </p>
+          {sortedDates.map((d, i) => (
+            <div key={d.date} className="flex gap-3 items-start bg-purple-500/10 border border-purple-400/20 rounded-xl px-3 py-2">
+              <div className="flex flex-col items-center pt-1 shrink-0">
+                <span className="text-purple-400 font-bold text-sm">D{i + 1}</span>
+                <span className="text-gray-400 text-xs mt-0.5">{d.date.slice(5)}</span>
+              </div>
+              <textarea
+                value={d.note}
+                onChange={(e) => updateNote(d.date, e.target.value)}
+                placeholder={`第${i + 1}天行程安排（如：上午 珀斯市区 → 下午 弗里曼特尔）`}
+                rows={2}
+                className="flex-1 bg-transparent text-white text-sm placeholder-gray-600 focus:outline-none resize-none"
+              />
+              <button
+                type="button"
+                onClick={() => toggleDate(d.date)}
+                className="p-1 text-gray-600 hover:text-red-400 transition-all mt-1 shrink-0"
+                title="移除此日期"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {sortedDates.length === 0 && (
+        <p className="text-gray-600 text-xs text-center py-2">尚未选择任何日期</p>
+      )}
     </div>
   );
 };
