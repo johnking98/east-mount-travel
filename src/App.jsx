@@ -57,6 +57,8 @@ const EastMountTravelSystem = () => {
   const [viewingImage, setViewingImage] = useState(null); // 查看大图
   const [rememberUsername, setRememberUsername] = useState(false); // 记住用户名（仅用户名，不记住密码）
   const [filterAssignedTo, setFilterAssignedTo] = useState(''); // 按负责人过滤
+  const [filterSource, setFilterSource] = useState(''); // 按订单来源过滤
+  const [sortOrder, setSortOrder] = useState('date_desc'); // 排序：date_desc新到旧, date_asc旧到新
   const [allActiveUsers, setAllActiveUsers] = useState([]); // 所有活跃用户（用于分配下拉框）
   
   const [formData, setFormData] = useState({
@@ -82,6 +84,7 @@ const EastMountTravelSystem = () => {
     paymentStatus: '未结算',  // 结算状态（独立于服务状态）
     source: '',
     assignedTo: '',
+    vehicle: '',  // 车辆分配
     images: []  // 订单图片数组
   });
 
@@ -130,7 +133,7 @@ const EastMountTravelSystem = () => {
           const userData = JSON.parse(savedUserData);
           
           // 🔒 严格验证：确保role有效
-          const validRoles = ['admin', 'manager', 'viewer', 'driver'];
+          const validRoles = ['admin', 'manager', 'viewer', 'driver', 'partner'];
           if (!validRoles.includes(userData.role)) {
             console.warn('检测到无效的role，自动修正为viewer');
             userData.role = 'viewer';
@@ -253,9 +256,14 @@ const EastMountTravelSystem = () => {
     if (!supabase) return;
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('*')
+      let query = supabase.from('bookings').select('*');
+
+      // partner角色只能看到自己公司来源的订单（数据库层面过滤）
+      if (currentUser?.role === 'partner' && currentUser?.source_filter) {
+        query = query.eq('source', currentUser.source_filter);
+      }
+
+      const { data, error } = await query
         .order('date', { ascending: true })
         .order('time', { ascending: true });
 
@@ -354,7 +362,7 @@ const EastMountTravelSystem = () => {
 
       // 🔒 严格验证：确保只有admin和manager可以看到金额
       // 如果role不是这三个之一，强制设置为viewer
-      const validRoles = ['admin', 'manager', 'viewer', 'driver'];
+      const validRoles = ['admin', 'manager', 'viewer', 'driver', 'partner'];
       if (!validRoles.includes(data.role)) {
         console.warn('检测到无效的role，自动修正为viewer');
         data.role = 'viewer';
@@ -383,6 +391,7 @@ const EastMountTravelSystem = () => {
         display_name: data.display_name,
         role: data.role,
         status: data.status,
+        source_filter: data.source_filter || null, // 合作方来源过滤
         created_at: data.created_at,
         loginTime: new Date().toISOString()
       };
@@ -834,6 +843,7 @@ const EastMountTravelSystem = () => {
         payment_status: formData.paymentStatus || '未结算',  // 结算状态
         source: formData.source || null,
         assigned_to: formData.assignedTo || null,
+        vehicle: formData.vehicle || null,  // 车辆分配
         images: formData.images || []  // 图片数组
       };
       
@@ -896,6 +906,7 @@ const EastMountTravelSystem = () => {
       paymentStatus: '未结算',
       source: '',
       assignedTo: '',
+      vehicle: '',
       images: []
     });
   };
@@ -928,6 +939,7 @@ const EastMountTravelSystem = () => {
       paymentStatus: booking.payment_status || '未结算',
       source: booking.source || '',
       assignedTo: booking.assigned_to || '',
+      vehicle: booking.vehicle || '',
       images: booking.images || []
     });
     setEditingBooking(booking);
@@ -1016,25 +1028,42 @@ const EastMountTravelSystem = () => {
   // 判断是否为高权限用户（可看全部订单）
   const isHighPrivilege = currentUser?.role === 'admin' || currentUser?.role === 'manager';
 
+  // 所有订单来源（用于下拉筛选）
+  const allSources = [...new Set(bookings.map(b => b.source).filter(Boolean))].sort();
+
   const filteredBookings = bookings.filter(booking => {
-    // 低权限用户只能看分配给自己的订单
-    if (!isHighPrivilege) {
+    // 低权限用户（viewer/driver）只能看分配给自己的订单
+    if (!isHighPrivilege && currentUser?.role !== 'partner') {
       const myDisplayName = currentUser?.display_name;
       if (booking.assigned_to !== myDisplayName) return false;
-      // 低权限用户也可以在自己的订单中搜索
       const matchesSearch = !searchTerm ||
         booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         booking.customer_phone?.includes(searchTerm);
       const matchesDate = !filterDate || booking.date === filterDate;
       return matchesSearch && matchesDate;
     }
-    // 高权限用户：正常搜索+过滤
-    const matchesSearch = 
+    // partner：数据库已过滤，只做搜索和日期过滤
+    if (currentUser?.role === 'partner') {
+      const matchesSearch = !searchTerm ||
+        booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        booking.customer_phone?.includes(searchTerm);
+      const matchesDate = !filterDate || booking.date === filterDate;
+      return matchesSearch && matchesDate;
+    }
+    // 高权限用户：全部过滤条件
+    const matchesSearch =
       booking.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.customer_phone?.includes(searchTerm);
     const matchesDate = !filterDate || booking.date === filterDate;
     const matchesAssignedTo = !filterAssignedTo || booking.assigned_to === filterAssignedTo;
-    return matchesSearch && matchesDate && matchesAssignedTo;
+    const matchesSource = !filterSource || booking.source === filterSource;
+    return matchesSearch && matchesDate && matchesAssignedTo && matchesSource;
+  }).sort((a, b) => {
+    // 排序：date_desc 新到旧，date_asc 旧到新
+    const dateA = `${a.date || ''} ${a.time || ''}`;
+    const dateB = `${b.date || ''} ${b.time || ''}`;
+    if (sortOrder === 'date_asc') return dateA.localeCompare(dateB);
+    return dateB.localeCompare(dateA); // date_desc 默认
   });
 
   const groupedByDate = filteredBookings.reduce((acc, booking) => {
@@ -1566,6 +1595,30 @@ const EastMountTravelSystem = () => {
                     ))}
                   </select>
                 )}
+
+                {/* 按来源筛选 - 仅高权限用户可见 */}
+                {isHighPrivilege && (
+                  <select
+                    value={filterSource}
+                    onChange={(e) => setFilterSource(e.target.value)}
+                    className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base bg-white/10 text-gray-300 hover:bg-white/20 border border-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400 cursor-pointer"
+                  >
+                    <option value="" className="bg-slate-800 text-white">全部来源</option>
+                    {allSources.map(src => (
+                      <option key={src} value={src} className="bg-slate-800 text-white">{src}</option>
+                    ))}
+                  </select>
+                )}
+
+                {/* 排序按钮 */}
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all whitespace-nowrap text-sm sm:text-base bg-white/10 text-gray-300 hover:bg-white/20 border border-white/20 focus:outline-none focus:ring-2 focus:ring-cyan-400 cursor-pointer"
+                >
+                  <option value="date_desc" className="bg-slate-800 text-white">⬇ 时间：新→旧</option>
+                  <option value="date_asc" className="bg-slate-800 text-white">⬆ 时间：旧→新</option>
+                </select>
               </div>
             </div>
             <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 w-full md:w-auto">
@@ -1596,7 +1649,10 @@ const EastMountTravelSystem = () => {
             <div className="mt-4 bg-cyan-500/10 border border-cyan-400/30 rounded-xl px-4 py-3 flex items-center space-x-2">
               <User className="w-4 h-4 text-cyan-400 flex-shrink-0" />
               <span className="text-cyan-300 text-sm">
-                您好，<strong>{currentUser.display_name}</strong>！以下是分配给您的订单，共 <strong>{filteredBookings.length}</strong> 条。
+                {currentUser?.role === 'partner'
+                  ? <>您好，<strong>{currentUser.display_name}</strong>！以下是来自贵公司的订单，共 <strong>{filteredBookings.length}</strong> 条。</>
+                  : <>您好，<strong>{currentUser.display_name}</strong>！以下是分配给您的订单，共 <strong>{filteredBookings.length}</strong> 条。</>
+                }
               </span>
             </div>
           )}
@@ -1621,9 +1677,9 @@ const EastMountTravelSystem = () => {
               onChange={(e) => setFilterDate(e.target.value)}
               className="px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
             />
-            {(searchTerm || filterDate) && (
+            {(searchTerm || filterDate || filterSource || filterAssignedTo) && (
               <button
-                onClick={() => { setSearchTerm(''); setFilterDate(''); }}
+                onClick={() => { setSearchTerm(''); setFilterDate(''); setFilterSource(''); setFilterAssignedTo(''); }}
                 className="px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl transition-all"
               >
                 清除
@@ -1797,7 +1853,7 @@ const EastMountTravelSystem = () => {
                           </div>
 
                           {/* 订单信息 - 来源和负责人 */}
-                          {(booking.source || booking.assigned_to) && (
+                          {(booking.source || booking.assigned_to || booking.vehicle) && (
                             <div className="flex flex-wrap gap-2 mb-3">
                               {booking.source && (
                                 <span className="text-xs bg-blue-500/10 text-blue-300 px-2 py-1 rounded border border-blue-400/20 flex items-center">
@@ -1809,6 +1865,12 @@ const EastMountTravelSystem = () => {
                                 <span className="text-xs bg-green-500/10 text-green-300 px-2 py-1 rounded border border-green-400/20 flex items-center">
                                   <span className="mr-1">👨</span>
                                   {booking.assigned_to}
+                                </span>
+                              )}
+                              {booking.vehicle && (
+                                <span className="text-xs bg-purple-500/10 text-purple-300 px-2 py-1 rounded border border-purple-400/20 flex items-center">
+                                  <span className="mr-1">🚗</span>
+                                  {booking.vehicle}
                                 </span>
                               )}
                             </div>
@@ -2019,7 +2081,12 @@ const EastMountTravelSystem = () => {
                                     <span className="text-green-300 text-sm">负责: {booking.assigned_to}</span>
                                   </div>
                                 )}
-                                {!booking.source && !booking.assigned_to && (
+                                {booking.vehicle && (
+                                  <div className="bg-purple-500/10 px-3 py-1.5 rounded-lg border border-purple-400/20">
+                                    <span className="text-purple-300 text-sm">🚗 车辆: {booking.vehicle}</span>
+                                  </div>
+                                )}
+                                {!booking.source && !booking.assigned_to && !booking.vehicle && (
                                   <div className="text-gray-500 text-sm">暂无</div>
                                 )}
                                 {/* 订单图片 */}
@@ -2987,6 +3054,17 @@ const OrderFormModal = ({ formData, setFormData, editingBooking, loading, onSubm
                     ✅ 已分配给：{formData.assignedTo}（该用户将在登录后看到此订单）
                   </p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-gray-300 font-medium mb-2">🚗 车辆分配</label>
+                <input
+                  type="text"
+                  value={formData.vehicle}
+                  onChange={(e) => setFormData({...formData, vehicle: e.target.value})}
+                  placeholder="例如: 丰田阿尔法、奔驰V260、鲁A12345"
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                />
               </div>
               
               {/* 定金尾款 - 仅admin和manager可见 */}
